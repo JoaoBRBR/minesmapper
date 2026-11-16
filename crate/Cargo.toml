@@ -1,0 +1,15 @@
+[package]
+name = "minefield"
+version = "0.1.0"
+edition = "2021"
+description = "Infinite minesweeper world core, compiled to WASM"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true

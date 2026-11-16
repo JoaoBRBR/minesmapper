@@ -1,0 +1,17 @@
+{
+  "name": "rust-tester",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm && tsc && vite build",
+    "preview": "vite preview",
+    "wasm": "wasm-pack build crate --target web --release --out-dir ../src/wasm/pkg --out-name minefield",
+    "test": "cargo test --manifest-path crate/Cargo.toml"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}

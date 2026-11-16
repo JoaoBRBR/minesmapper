@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#26547f" />
+    <title>Minefield — infinite minesweeper</title>
+  </head>
+  <body>
+    <canvas id="bg" hidden aria-hidden="true"></canvas>
+    <canvas id="map" hidden></canvas>
+
+    <div id="hud" hidden>
+      <span class="chip" id="score">0 cleared</span>
+      <span class="chip" id="timer" hidden>00:00</span>
+      <button id="mode" aria-pressed="false">⛏ Reveal</button>
+      <button id="home" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
+      <button id="menu" title="Menu (Esc)">☰ Menu</button>
+      <span class="chip" id="pos">0, 0</span>
+    </div>
+
+    <!-- End-of-game dialog: can be dismissed to look around the map. -->
+    <div id="banner" class="dialog" hidden>
+      <div id="banner-title" class="dialog-title"></div>
+      <small id="banner-sub"></small>
+      <div class="row">
+        <button id="b-restart" class="primary">↻ Restart</button>
+        <button id="b-look">👁 Look around</button>
+        <button id="b-menu">☰ Menu</button>
+      </div>
+    </div>
+
+    <!-- Pause menu -->
+    <div id="pause" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title">Paused</div>
+        <small id="pause-name"></small>
+        <div class="stack">
+          <button id="p-resume" class="primary">▶ Resume</button>
+          <button id="p-restart">↻ Restart this world</button>
+          <button id="p-exit">⌂ Save &amp; exit to menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main menu -->
+    <main id="home-screen" class="screen" hidden>
+      <div class="panel">
+        <header class="title">
+          <h1>Minefield</h1>
+          <p>Infinite &amp; island minesweeper</p>
+        </header>
+        <div class="row actions">
+          <button id="h-continue" class="primary" hidden>▶ Continue</button>
+          <button id="h-new" class="primary">＋ New world</button>
+        </div>
+        <h2>Your worlds</h2>
+        <div id="worlds"></div>
+      </div>
+    </main>
+
+    <!-- World creator -->
+    <section id="creator" class="screen" hidden>
+      <div class="panel creator-grid">
+        <div class="form">
+          <h1>New world</h1>
+
+          <label class="field">
+            <span>Name</span>
+            <input id="c-name" maxlength="40" autocomplete="off" />
+          </label>
+
+          <fieldset>
+            <legend>Mode</legend>
+            <div class="seg" id="c-mode">
+              <button type="button" data-v="endless">♾ Endless</button>
+              <button type="button" data-v="island">🏝 Island</button>
+            </div>
+            <p class="hint" id="c-mode-hint"></p>
+          </fieldset>
+
+          <fieldset id="c-size-wrap">
+            <legend>Island size</legend>
+            <div class="seg" id="c-size">
+              <button type="button" data-v="96">Small</button>
+              <button type="button" data-v="192">Medium</button>
+              <button type="button" data-v="320">Large</button>
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <span>Seed</span>
+            <div class="row nowrap">
+              <input id="c-seed" autocomplete="off" spellcheck="false" aria-label="Seed" />
+              <button type="button" id="c-dice" title="Random seed" aria-label="Random seed">🎲</button>
+            </div>
+            <span class="hint" id="c-seed-hint"></span>
+          </div>
+
+          <fieldset>
+            <legend>Difficulty</legend>
+            <div class="seg" id="c-diff">
+              <button type="button" data-v="easy">Easy</button>
+              <button type="button" data-v="normal">Normal</button>
+              <button type="button" data-v="hard">Hard</button>
+              <button type="button" data-v="custom">Custom</button>
+            </div>
+            <label class="slider">
+              <span>Mines near the center <b id="c-d0-val"></b></span>
+              <input type="range" id="c-d0" min="5" max="35" />
+            </label>
+            <label class="slider">
+              <span id="c-d1-label">Mines far away <b id="c-d1-val"></b></span>
+              <input type="range" id="c-d1" min="5" max="45" />
+            </label>
+          </fieldset>
+        </div>
+
+        <div class="side">
+          <canvas id="c-preview"></canvas>
+          <p class="hint" id="c-stats"></p>
+          <div class="row">
+            <button type="button" id="c-cancel">Cancel</button>
+            <button type="button" id="c-create" class="primary">Create &amp; play</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
