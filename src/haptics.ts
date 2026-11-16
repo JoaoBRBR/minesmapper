@@ -12,6 +12,8 @@ export const haptics = {
   open: () => buzz(10),
   boom: () => buzz([70, 40, 140]),
   win: () => buzz([30, 50, 30, 50, 90]),
+  found: () => buzz([20, 40, 20]),
+  oracle: () => buzz(35),
   blocked: () => buzz([25, 40, 25]),
   test: () => buzz(40),
 };

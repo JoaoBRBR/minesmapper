@@ -115,6 +115,20 @@ export const sound = {
     const c = ctx();
     if (c) tone(c, 170, 0.14, { type: 'sawtooth', vol: 0.09, to: 120 });
   },
+  /** An oracle was found. */
+  found() {
+    const c = ctx();
+    if (!c) return;
+    [784, 988, 1175, 1568].forEach((f, i) => tone(c, f, 0.22, { type: 'sine', vol: 0.14, at: i * 0.07 }));
+  },
+  /** An oracle was spent. */
+  oracle() {
+    const c = ctx();
+    if (!c) return;
+    tone(c, 330, 0.5, { type: 'sine', vol: 0.14, to: 1320 });
+    tone(c, 495, 0.5, { type: 'sine', vol: 0.08, to: 1980, at: 0.04 });
+    noise(c, 0.4, { vol: 0.05, from: 3000, to: 9000, kind: 'highpass' });
+  },
   /** Played when a toggle in settings is switched on. */
   test() {
     const c = ctx();

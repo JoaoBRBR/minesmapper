@@ -471,3 +471,17 @@ input:not([type]) {
   z-index: 18;
   pointer-events: none;
 }
+
+/* ---- Oracle power-up ---- */
+#oracle {
+  background: #fde68a;
+  border-color: #b45309;
+}
+#oracle[aria-pressed='true'] {
+  background: #f59e0b;
+  color: #1c1917;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.55), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+#map.targeting {
+  cursor: cell;
+}

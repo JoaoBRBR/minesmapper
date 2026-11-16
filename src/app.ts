@@ -293,8 +293,8 @@ function syncCreatorVisibility() {
   const island = modeSeg.get() === 'island';
   el('c-size-wrap').hidden = !island;
   el('c-mode-hint').textContent = island
-    ? 'A finite island surrounded by water. Clear every safe cell to win. You can only reveal near explored ground.'
-    : 'An infinite map. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines). You can only reveal near explored ground.';
+    ? 'A finite island surrounded by water. Clear every safe cell to win. You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.'
+    : 'An infinite map. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines). You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.';
   el('c-d1-label').firstChild!.textContent = island ? 'Mines at the coast ' : 'Mines far away ';
 }
 

@@ -38,6 +38,7 @@ const $pos = el('pos');
 const $mode = el<HTMLButtonElement>('mode');
 const $home = el<HTMLButtonElement>('home');
 const $menu = el<HTMLButtonElement>('menu');
+const $oracle = el<HTMLButtonElement>('oracle');
 const $banner = el('banner');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
@@ -46,6 +47,8 @@ let cb: GameCallbacks;
 let world: World | null = null;
 let active = false;
 let flagMode = false;
+/** True after pressing the Oracle button: the next tap on a hidden cell spends one. */
+let oracleMode = false;
 const cam: Camera = { cx: HOME.x, cy: HOME.y, zoom: 32 };
 let w = 0;
 let h = 0;
@@ -97,6 +100,7 @@ export function loadWorld(
   ripple = null;
   endFx = null;
   denied = null;
+  oracleMode = false;
   glide = null;
   pointers.clear();
   $timer.hidden = cfg.mode !== 'island';
@@ -152,6 +156,7 @@ export function setActive(on: boolean) {
     ripple = null;
     endFx = null;
     denied = null;
+    oracleMode = false;
   } else {
     resize();
   }
@@ -267,6 +272,12 @@ function updateHud(now: number) {
       `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()} away · 🚩 ${wd.flag_count()}${tail}`,
     );
   }
+  const oracles = wd.powerups_available();
+  if (oracles === 0 && oracleMode) oracleMode = false;
+  $oracle.hidden = oracles === 0;
+  setText($oracle, `✨ Oracle ×${oracles}`);
+  $oracle.setAttribute('aria-pressed', String(oracleMode));
+  canvas.classList.toggle('targeting', oracleMode);
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
   updateBanner(now);
@@ -376,7 +387,17 @@ function isRevealedNumber(x: number, y: number): boolean {
 function activate(px: number, py: number, forceFlag: boolean) {
   const wd = world!;
   const [x, y] = screenToCell(cam, w, h, px, py);
-  const before = { score: wd.score(), flags: wd.flag_count(), over: wd.is_game_over(), won: wd.is_won() };
+  const before = {
+    score: wd.score(),
+    flags: wd.flag_count(),
+    over: wd.is_game_over(),
+    won: wd.is_won(),
+    found: wd.powerups_found(),
+  };
+  if (oracleMode && !forceFlag) {
+    useOracle(before, x, y);
+    return;
+  }
   if (forceFlag || flagMode) {
     wd.toggle_flag(x, y);
   } else if (isRevealedNumber(x, y)) {
@@ -392,9 +413,42 @@ function activate(px: number, py: number, forceFlag: boolean) {
   cb.onChange();
 }
 
+type Before = { score: number; flags: number; over: boolean; won: boolean; found: number };
+
+function toggleOracleMode() {
+  const wd = world;
+  if (!wd || wd.powerups_available() === 0) return;
+  oracleMode = !oracleMode;
+  if (oracleMode) toast('Tap a hidden cell to learn the truth about it');
+  invalidate();
+}
+
+/** Spends an oracle on the tapped cell: a safe cell opens, a mine gets flagged. */
+function useOracle(before: Before, x: number, y: number) {
+  const wd = world!;
+  const result = wd.use_oracle(x, y);
+  if (result === 3) {
+    // Not allowed there (already revealed, water, or too far): keep targeting.
+    denied = { x, y, t0: performance.now() };
+    toast(`Pick a hidden cell within ${wd.reach()} cells of explored ground`);
+    sound.blocked();
+    haptics.blocked();
+  } else {
+    oracleMode = false;
+    if (result !== 0) {
+      sound.oracle();
+      haptics.oracle();
+      toast(result === 1 ? '✨ Safe! The cell was revealed' : '💣 A mine! It has been flagged');
+      feedback(before, x, y);
+      cb.onChange();
+    }
+  }
+  invalidate();
+}
+
 /** Sounds, vibration and animations for whatever the last action did. */
 function feedback(
-  before: { score: number; flags: number; over: boolean; won: boolean },
+  before: Before,
   x: number,
   y: number,
 ) {
@@ -447,6 +501,13 @@ function feedback(
     haptics.flag();
   } else if (flagDelta < 0) {
     sound.unflag();
+  }
+
+  if (wd.powerups_found() > before.found) {
+    const n = wd.powerups_available();
+    toast(`✨ You found an oracle! (${n} ready)`);
+    sound.found();
+    haptics.found();
   }
 }
 
@@ -548,14 +609,37 @@ window.addEventListener('keydown', (e) => {
   if (!active || e.target instanceof HTMLInputElement || !el('settings').hidden) return;
   if (e.key === 'f' || e.key === 'F') toggleFlagMode();
   if (e.key === 'c' || e.key === 'C' || e.key === 'Home') recenter();
-  if (e.key === 'Escape') cb.onMenu();
+  if (e.key === 'o' || e.key === 'O') toggleOracleMode();
+  if (e.key === 'Escape') {
+    if (oracleMode) oracleMode = false;
+    else cb.onMenu();
+  }
 });
 $mode.addEventListener('click', toggleFlagMode);
 $home.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
+$oracle.addEventListener('click', toggleOracleMode);
 el('b-restart').addEventListener('click', () => cb.onRestart());
 el('b-menu').addEventListener('click', () => cb.onMenu());
 el('b-look').addEventListener('click', () => {
   bannerDismissed = true;
   $banner.hidden = true;
 });
+
+// Test hook (dev server only): lets browser tests set up positions without hours of play.
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__dev = {
+    world: () => world,
+    invalidate,
+    goto(x: number, y: number) {
+      cam.cx = x + 0.5;
+      cam.cy = y + 0.5;
+      cam.zoom = 32;
+      invalidate();
+    },
+    cellToScreen: (x: number, y: number) => [
+      (x + 0.5 - cam.cx) * cam.zoom + w / 2,
+      (y + 0.5 - cam.cy) * cam.zoom + h / 2,
+    ],
+  };
+}

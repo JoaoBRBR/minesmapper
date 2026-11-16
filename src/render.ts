@@ -18,6 +18,8 @@ const ST_REVEALED = 0x20;
 const ST_MINE = 0x30;
 /** Hidden + low nibble 0xF: unplayable water around the island. */
 const ST_VOID = 0x0f;
+/** Bit 6 on a revealed cell: it held a power-up. */
+const ST_POWERUP = 0x40;
 
 type RGB = [number, number, number];
 
@@ -186,6 +188,7 @@ export function draw(
         const mx = sx + zoom / 2;
         const my = sy + zoom / 2;
         if (state === ST_REVEALED) {
+          if (b & ST_POWERUP && zoom >= 12) drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
           const n = b & 0x0f;
           if (n > 0 && zoom >= 12) {
             ctx.lineWidth = Math.max(2, zoom * 0.14);
@@ -248,6 +251,21 @@ export function draw(
   }
 
   if (view !== 'preview') drawVignette(ctx, w, h);
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#fbbf24';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1, r * 0.25);
+  ctx.strokeStyle = '#78350f';
+  ctx.stroke();
 }
 
 function drawFlag(ctx: CanvasRenderingContext2D, sx: number, sy: number, z: number) {

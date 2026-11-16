@@ -6,6 +6,7 @@
 
 mod island;
 mod noise;
+pub mod solver;
 mod terrain;
 
 use island::Island;
@@ -35,6 +36,37 @@ fn dist_from_origin(x: i32, y: i32) -> f64 {
     ((x as f64).powi(2) + (y as f64).powi(2)).sqrt()
 }
 
+/// Probability that a safe cell hides a reveal-one-cell power-up ("oracle"), by local
+/// mine density. Derived from `examples/calibrate.rs`: a perfect solver is forced into a
+/// coin-flip about this often per cleared cell, so oracles are exactly as rare as the
+/// guesses they cure (measured per 1000 cells: 0.06 @20%, 0.44 @24%, 7.9 @28%, 32 @30%,
+/// 81 @34%, 132 @36%). A small floor keeps them a (very rare) possibility everywhere.
+const POWERUP_RATE: [(f32, f64); 12] = [
+    (0.00, 0.0001),
+    (0.20, 0.0001),
+    (0.22, 0.00013),
+    (0.24, 0.00044),
+    (0.26, 0.00125),
+    (0.28, 0.0079),
+    (0.30, 0.032),
+    (0.32, 0.044),
+    (0.34, 0.081),
+    (0.36, 0.132),
+    (0.45, 0.15),
+    (1.00, 0.15),
+];
+
+fn powerup_rate(density: f32) -> f64 {
+    for pair in POWERUP_RATE.windows(2) {
+        let ((d0, r0), (d1, r1)) = (pair[0], pair[1]);
+        if density <= d1 {
+            let t = ((density - d0) / (d1 - d0)).clamp(0.0, 1.0) as f64;
+            return r0 + (r1 - r0) * t;
+        }
+    }
+    POWERUP_RATE[POWERUP_RATE.len() - 1].1
+}
+
 /// Max cells recorded per action in the reveal log (the log only drives animation).
 const MAX_LOG: usize = 60_000;
 
@@ -46,9 +78,11 @@ const MAX_FLOOD: usize = 100_000;
 pub const ST_HIDDEN: u8 = 0x00;
 pub const ST_FLAG: u8 = 0x10;
 pub const ST_REVEALED: u8 = 0x20;
+/// Set on a revealed cell that held a power-up (bit 6, outside the state/count bits).
+pub const ST_POWERUP: u8 = 0x40;
 pub const ST_MINE: u8 = 0x30; // low bit 1 = exploded, 0 = shown after loss
 /// Bump when the `export_state` layout changes.
-const STATE_VERSION: i32 = 1;
+const STATE_VERSION: i32 = 2;
 
 /// Hidden state with low nibble 0xF = not playable (water outside the island).
 pub const ST_VOID: u8 = 0x0f;
@@ -75,6 +109,9 @@ pub struct World {
     /// Distance-weighted score and the farthest revealed distance (derived from `revealed`).
     points: f64,
     farthest: f64,
+    /// Power-ups found (revealed cells that hid one) and spent.
+    powerups_found: u32,
+    powerups_used: u32,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -104,6 +141,8 @@ impl World {
             reveal_log: Vec::new(),
             points: 0.0,
             farthest: 0.0,
+            powerups_found: 0,
+            powerups_used: 0,
             island: None,
             mines_total: 0,
         }
@@ -175,7 +214,8 @@ impl World {
 
     /// Serialises player progress (not the world itself, which is deterministic).
     /// Layout: `[version, flags, origin_x, origin_y, n, (x, y) * n]` followed by
-    /// the same `[n, (x, y) * n]` block for flagged and then exploded cells.
+    /// the same `[n, (x, y) * n]` block for flagged and then exploded cells, then
+    /// (version 2) the number of power-ups spent. Version 1 saves have no such field.
     /// `flags`: bit0 = has first-click origin, bit1 = game over, bit2 = won.
     pub fn export_state(&self) -> Vec<i32> {
         let (ox, oy) = self.safe_origin.unwrap_or((0, 0));
@@ -192,6 +232,7 @@ impl World {
                 out.push(y);
             }
         }
+        out.push(self.powerups_used as i32);
         out
     }
 
@@ -209,7 +250,8 @@ impl World {
             *pos = end;
             Some(body.chunks_exact(2).map(|c| (c[0], c[1])).collect())
         }
-        if data.len() < 4 || data[0] != STATE_VERSION {
+        let version = data.first().copied().unwrap_or(0);
+        if data.len() < 4 || !(1..=STATE_VERSION).contains(&version) {
             return false;
         }
         let mut pos = 4;
@@ -217,6 +259,17 @@ impl World {
             (read_set(data, &mut pos), read_set(data, &mut pos), read_set(data, &mut pos))
         else {
             return false;
+        };
+        let used = if version >= 2 {
+            match data.get(pos) {
+                Some(&u) if u >= 0 => {
+                    pos += 1;
+                    u as u32
+                }
+                _ => return false,
+            }
+        } else {
+            0
         };
         if pos != data.len() {
             return false;
@@ -228,6 +281,7 @@ impl World {
         self.revealed = revealed;
         self.flagged = flagged;
         self.exploded = exploded;
+        self.powerups_used = used;
         self.reveal_log.clear();
         self.recompute_score();
         self.recount_mines();
@@ -283,10 +337,62 @@ impl World {
     fn recompute_score(&mut self) {
         self.points = 0.0;
         self.farthest = 0.0;
-        for &(x, y) in &self.revealed {
+        let revealed: Vec<(i32, i32)> = self.revealed.iter().copied().collect();
+        self.powerups_found = revealed.iter().filter(|&&(x, y)| self.is_powerup(x, y)).count() as u32;
+        for (x, y) in revealed {
             let d = dist_from_origin(x, y);
             self.points += cell_points(d);
             self.farthest = self.farthest.max(d);
+        }
+    }
+
+    /// Whether a (safe) cell hides a power-up. Deterministic from the seed.
+    pub fn is_powerup(&self, x: i32, y: i32) -> bool {
+        if !self.is_playable(x, y) || self.is_mine(x, y) {
+            return false;
+        }
+        let threshold = (powerup_rate(self.density_at(x, y)) * u32::MAX as f64) as u32;
+        hash(self.seed ^ 0xa5a5_1234, x, y) < threshold
+    }
+
+    /// Power-ups collected so far (including spent ones).
+    pub fn powerups_found(&self) -> u32 {
+        self.powerups_found
+    }
+
+    /// Power-ups ready to use.
+    pub fn powerups_available(&self) -> u32 {
+        self.powerups_found.saturating_sub(self.powerups_used)
+    }
+
+    /// Spends a power-up to learn the truth about one hidden cell: a safe cell is
+    /// revealed, a mine is flagged. Returns 0 = none available, 1 = revealed a safe
+    /// cell, 2 = marked a mine, 3 = not allowed there (nothing is spent).
+    /// The frontier rule applies, so it can't be used to skip far ahead.
+    pub fn use_oracle(&mut self, x: i32, y: i32) -> u32 {
+        if self.powerups_available() == 0 {
+            return 0;
+        }
+        if self.game_over
+            || self.won
+            || !self.is_playable(x, y)
+            || self.revealed.contains(&(x, y))
+            || !self.can_reveal(x, y)
+        {
+            return 3;
+        }
+        if self.is_mine(x, y) {
+            if self.flagged.contains(&(x, y)) {
+                return 3;
+            }
+            self.flagged.insert((x, y));
+            self.powerups_used += 1;
+            2
+        } else {
+            self.flagged.remove(&(x, y));
+            self.powerups_used += 1;
+            self.reveal_unchecked(x, y);
+            1
         }
     }
 
@@ -386,6 +492,9 @@ impl World {
             let d = dist_from_origin(cx, cy);
             self.points += cell_points(d);
             self.farthest = self.farthest.max(d);
+            if self.is_powerup(cx, cy) {
+                self.powerups_found += 1;
+            }
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -469,7 +578,7 @@ impl World {
                 let state = if self.exploded.contains(&p) {
                     ST_MINE | 1
                 } else if self.revealed.contains(&p) {
-                    ST_REVEALED | self.adjacent(x, y)
+                    ST_REVEALED | self.adjacent(x, y) | if self.is_powerup(x, y) { ST_POWERUP } else { 0 }
                 } else if self.game_over && self.is_mine(x, y) {
                     ST_MINE
                 } else if self.flagged.contains(&p) {
@@ -491,6 +600,25 @@ impl World {
             }
         }
         out
+    }
+}
+
+impl solver::Board for World {
+    fn cell(&self, x: i32, y: i32) -> solver::Cell {
+        if !self.is_playable(x, y) {
+            solver::Cell::Void
+        } else if self.revealed.contains(&(x, y)) {
+            solver::Cell::Num(self.adjacent(x, y))
+        } else {
+            solver::Cell::Hidden
+        }
+    }
+}
+
+impl World {
+    /// Every revealed cell (not exported to JS).
+    pub fn revealed_cells(&self) -> Vec<(i32, i32)> {
+        self.revealed.iter().copied().collect()
     }
 }
 
@@ -768,5 +896,128 @@ mod tests {
         assert_eq!(live.points(), rebuilt.points());
         assert_eq!(live.farthest(), rebuilt.farthest());
         assert!(live.points() >= live.score());
+    }
+
+    #[test]
+    fn solver_is_sound_on_real_worlds() {
+        // Everything the solver calls safe must be safe, and every mine a mine,
+        // across many seeds and densities, played out until it gets stuck.
+        for (seed, density) in (0..40u32).zip([0.12f32, 0.16, 0.20, 0.24].iter().cycle()) {
+            let mut w = World::new(seed, *density, *density, 0.0);
+            w.reveal(0, 0);
+            for _ in 0..60 {
+                if w.score() > 2500 {
+                    break;
+                }
+                let a = solver::analyze(&w, &w.revealed_cells());
+                for &(x, y) in &a.safe {
+                    assert!(!w.is_mine(x, y), "seed {seed}: solver said ({x},{y}) is safe");
+                }
+                for &(x, y) in &a.mines {
+                    assert!(w.is_mine(x, y), "seed {seed}: solver said ({x},{y}) is a mine");
+                }
+                if a.safe.is_empty() {
+                    break;
+                }
+                for (x, y) in a.safe {
+                    w.reveal(x, y);
+                }
+                assert!(!w.is_game_over(), "seed {seed}: solver walked into a mine");
+            }
+        }
+    }
+
+    #[test]
+    fn powerup_rate_is_monotonic_and_bounded() {
+        let mut last = 0.0;
+        for i in 0..=100 {
+            let r = powerup_rate(i as f32 / 100.0);
+            assert!(r >= last - 1e-12 && (0.0001..=0.15).contains(&r), "d={} r={r}", i);
+            last = r;
+        }
+    }
+
+    #[test]
+    fn powerups_follow_density_and_never_hide_under_mines() {
+        let count = |density: f32, side: i32| {
+            let w = World::new(77, density, density, 0.0);
+            let mut n = 0;
+            for x in 0..side {
+                for y in 0..side {
+                    if w.is_powerup(x + 20, y + 20) {
+                        assert!(!w.is_mine(x + 20, y + 20));
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let hard = count(0.28, 120); // ~0.8% of ~10k safe cells
+        assert!((40..160).contains(&hard), "hard: {hard}");
+        let calm = count(0.15, 200); // ~0.01% of ~34k safe cells
+        assert!(calm < 25, "calm: {calm}");
+        assert!(hard as f64 / 120.0f64.powi(2) > calm as f64 / 200.0f64.powi(2) * 10.0);
+    }
+
+    #[test]
+    fn oracle_flags_mines_reveals_safe_cells_and_is_spent() {
+        let mut w = World::new(31, 0.30, 0.30, 0.0);
+        let p = (-30..30)
+            .flat_map(|y| (-30..30).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_powerup(x, y))
+            .expect("a power-up at 30% density");
+        // Only the power-up cell is revealed (and is the first-click origin).
+        assert!(w.import_state(&[2, 1, p.0, p.1, 1, p.0, p.1, 0, 0, 0]));
+        assert_eq!(w.powerups_found(), 1);
+        assert_eq!(w.powerups_available(), 1);
+        let near = |w: &World, want_mine: bool| {
+            (-3..=3)
+                .flat_map(|dy| (-3..=3).map(move |dx| (p.0 + dx, p.1 + dy)))
+                .find(|&(x, y)| (x, y) != p && w.is_mine(x, y) == want_mine && !w.revealed.contains(&(x, y)))
+                .unwrap()
+        };
+        // Out of reach: refused, nothing spent.
+        assert_eq!(w.use_oracle(p.0 + 40, p.1), 3);
+        assert_eq!(w.powerups_available(), 1);
+        // A mine gets flagged.
+        let mine = near(&w, true);
+        assert_eq!(w.use_oracle(mine.0, mine.1), 2);
+        assert!(w.flagged.contains(&mine));
+        assert_eq!(w.powerups_available(), 0);
+        // Nothing left to spend.
+        let safe = near(&w, false);
+        assert_eq!(w.use_oracle(safe.0, safe.1), 0);
+        assert!(!w.is_game_over());
+    }
+
+    #[test]
+    fn oracle_reveals_a_safe_cell_and_state_keeps_the_spent_count() {
+        let mut w = World::new(31, 0.30, 0.30, 0.0);
+        let p = (-30..30)
+            .flat_map(|y| (-30..30).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_powerup(x, y))
+            .unwrap();
+        assert!(w.import_state(&[2, 1, p.0, p.1, 1, p.0, p.1, 0, 0, 0]));
+        let safe = (-3..=3)
+            .flat_map(|dy| (-3..=3).map(move |dx| (p.0 + dx, p.1 + dy)))
+            .find(|&(x, y)| (x, y) != p && !w.is_mine(x, y) && !w.revealed.contains(&(x, y)))
+            .unwrap();
+        assert_eq!(w.use_oracle(safe.0, safe.1), 1);
+        assert!(w.revealed.contains(&safe));
+        assert_eq!(w.powerups_available(), 0);
+        let mut b = World::new(31, 0.30, 0.30, 0.0);
+        assert!(b.import_state(&w.export_state()));
+        assert_eq!(b.powerups_found(), w.powerups_found());
+        assert_eq!(b.powerups_available(), 0);
+    }
+
+    #[test]
+    fn version_one_saves_still_load() {
+        let mut w = World::new(2, 0.15, 0.15, 0.0);
+        assert!(w.import_state(&[1, 1, 0, 0, 1, 0, 0, 0, 0]));
+        assert_eq!(w.powerups_available(), w.powerups_found());
+        // A v2 save must carry the spent counter.
+        assert!(!w.import_state(&[2, 1, 0, 0, 1, 0, 0, 0, 0]));
+        assert!(w.import_state(&[2, 1, 0, 0, 1, 0, 0, 0, 0, 0]));
     }
 }
