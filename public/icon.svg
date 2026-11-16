@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f82b4"/>
+      <stop offset="1" stop-color="#173850"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#sea)"/>
+  <g stroke="#fff" stroke-opacity=".09" stroke-width="3">
+    <path d="M128 0v512M256 0v512M384 0v512M0 128h512M0 256h512M0 384h512"/>
+  </g>
+  <path d="M88 306c-6-86 76-136 160-126 82-30 186 22 176 116-2 82-92 130-182 120-92 8-148-40-154-110z" fill="#ead9a2"/>
+  <path d="M118 302c-2-62 58-98 130-92 70-20 144 22 138 88-2 56-70 90-146 82-72 6-120-28-122-78z" fill="#5f9f58"/>
+  <path d="M170 262c18-26 56-34 84-20 28-16 70-6 84 24-26-10-58-10-84 2-30-12-60-12-84-6z" fill="#7bb86f" opacity=".7"/>
+  <rect x="236" y="168" width="12" height="150" rx="6" fill="#2b2417"/>
+  <path d="M248 170l92 32-92 34z" fill="#e0342b"/>
+  <g transform="translate(330 322)">
+    <g stroke="#1c1917" stroke-width="9" stroke-linecap="round">
+      <path d="M-34 0h68M0 -34v68M-24 -24l48 48M24 -24l-48 48"/>
+    </g>
+    <circle r="22" fill="#1c1917"/>
+    <circle cx="-7" cy="-8" r="6" fill="#fff" opacity=".55"/>
+  </g>
+</svg>

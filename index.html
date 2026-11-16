@@ -3,6 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Minefield" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
@@ -35,6 +41,13 @@
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
       </div>
+    </div>
+
+    <!-- New-version notice (service worker) -->
+    <div id="update" role="status" hidden>
+      <span>A new version is ready.</span>
+      <button id="update-reload" class="primary">Reload</button>
+      <button id="update-dismiss" aria-label="Dismiss">✕</button>
     </div>
 
     <!-- Pause menu -->
@@ -91,7 +104,11 @@
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>
+          <button id="h-install" hidden>⬇ Install app</button>
         </div>
+        <p id="ios-hint" class="hint center" hidden>
+          To install on iPhone/iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.
+        </p>
         <h2>Your worlds</h2>
         <div id="worlds"></div>
       </div>

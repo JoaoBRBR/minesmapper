@@ -1,5 +1,6 @@
 import init from './wasm/pkg/minefield';
 import { setBackground } from './background';
+import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { prefersReducedMotion, setSetting, settings } from './settings';
 import { sound } from './sound';
@@ -454,6 +455,11 @@ export async function start() {
   initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
   bindCreator();
   bindSettings();
+  setupInstall(el<HTMLButtonElement>('h-install'), el('ios-hint'));
+  const $update = el('update');
+  el('update-reload').addEventListener('click', () => location.reload());
+  el('update-dismiss').addEventListener('click', () => ($update.hidden = true));
+  registerServiceWorker(() => ($update.hidden = false));
 
   el('h-new').addEventListener('click', () => void openCreator());
   el('p-resume').addEventListener('click', closePause);
