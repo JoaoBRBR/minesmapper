@@ -110,6 +110,11 @@ export const sound = {
     [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, f, 0.35, { vol: 0.16, at: i * 0.12 }));
     tone(c, 1046.5, 0.8, { type: 'sine', vol: 0.1, at: 0.5 });
   },
+  /** A tap refused because it was too far from explored ground. */
+  blocked() {
+    const c = ctx();
+    if (c) tone(c, 170, 0.14, { type: 'sawtooth', vol: 0.09, to: 120 });
+  },
   /** Played when a toggle in settings is switched on. */
   test() {
     const c = ctx();

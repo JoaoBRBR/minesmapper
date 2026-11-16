@@ -19,6 +19,22 @@ use wasm_bindgen::prelude::*;
 /// Terrain chunks kept in memory before the cache is flushed.
 const MAX_CACHED_CHUNKS: usize = 4096;
 
+/// You may only reveal a cell within this many cells (Chebyshev) of an already
+/// revealed one, so a lucky far-away click can't skip the work in between.
+const REACH: i32 = 3;
+/// Endless mode: the very first click must be this close to the origin.
+const FIRST_CLICK_RADIUS: i32 = 8;
+
+/// Points for clearing a cell at distance `d` from the origin: farther is worth more
+/// (and more dangerous, since mines get denser).
+fn cell_points(d: f64) -> f64 {
+    1.0 + d / 100.0
+}
+
+fn dist_from_origin(x: i32, y: i32) -> f64 {
+    ((x as f64).powi(2) + (y as f64).powi(2)).sqrt()
+}
+
 /// Max cells recorded per action in the reveal log (the log only drives animation).
 const MAX_LOG: usize = 60_000;
 
@@ -56,6 +72,9 @@ pub struct World {
     won: bool,
     /// `(x, y, depth)` triples for cells revealed since the last `take_reveal_log`.
     reveal_log: Vec<i32>,
+    /// Distance-weighted score and the farthest revealed distance (derived from `revealed`).
+    points: f64,
+    farthest: f64,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -83,6 +102,8 @@ impl World {
             game_over: false,
             won: false,
             reveal_log: Vec::new(),
+            points: 0.0,
+            farthest: 0.0,
             island: None,
             mines_total: 0,
         }
@@ -208,12 +229,65 @@ impl World {
         self.flagged = flagged;
         self.exploded = exploded;
         self.reveal_log.clear();
+        self.recompute_score();
         self.recount_mines();
         true
     }
 
     pub fn is_game_over(&self) -> bool {
         self.game_over
+    }
+
+    /// Distance-weighted score: each cleared cell is worth `1 + distance / 100`.
+    pub fn points(&self) -> u32 {
+        self.points.floor() as u32
+    }
+
+    /// Distance from the origin of the farthest revealed cell, in cells.
+    pub fn farthest(&self) -> u32 {
+        self.farthest.floor() as u32
+    }
+
+    /// How far (in cells) from explored ground you may reveal.
+    pub fn reach(&self) -> u32 {
+        REACH as u32
+    }
+
+    /// Whether the frontier rule allows revealing this cell. The first click is
+    /// restricted to the start area in endless mode, and free on an island.
+    pub fn can_reveal(&self, x: i32, y: i32) -> bool {
+        if self.revealed.is_empty() {
+            return self.island.is_some() || (x.abs() <= FIRST_CLICK_RADIUS && y.abs() <= FIRST_CLICK_RADIUS);
+        }
+        for dy in -REACH..=REACH {
+            for dx in -REACH..=REACH {
+                if self.revealed.contains(&(x + dx, y + dy)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// True when a tap on this cell would be refused only because it is too far
+    /// from explored ground (so the UI can explain why).
+    pub fn is_out_of_reach(&self, x: i32, y: i32) -> bool {
+        !self.game_over
+            && !self.won
+            && self.is_playable(x, y)
+            && !self.revealed.contains(&(x, y))
+            && !self.flagged.contains(&(x, y))
+            && !self.can_reveal(x, y)
+    }
+
+    fn recompute_score(&mut self) {
+        self.points = 0.0;
+        self.farthest = 0.0;
+        for &(x, y) in &self.revealed {
+            let d = dist_from_origin(x, y);
+            self.points += cell_points(d);
+            self.farthest = self.farthest.max(d);
+        }
     }
 
     /// Number of cells revealed so far.
@@ -272,6 +346,14 @@ impl World {
 
     /// Reveals a cell (flood-filling empty regions). Returns cells newly revealed.
     pub fn reveal(&mut self, x: i32, y: i32) -> u32 {
+        if !self.can_reveal(x, y) {
+            return 0;
+        }
+        self.reveal_unchecked(x, y)
+    }
+
+    /// `reveal` without the frontier rule (chording, and tests).
+    fn reveal_unchecked(&mut self, x: i32, y: i32) -> u32 {
         if self.game_over
             || self.won
             || !self.is_playable(x, y)
@@ -301,6 +383,9 @@ impl World {
             }
             self.revealed.insert((cx, cy));
             count += 1;
+            let d = dist_from_origin(cx, cy);
+            self.points += cell_points(d);
+            self.farthest = self.farthest.max(d);
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -365,7 +450,7 @@ impl World {
         for dy in -1..=1 {
             for dx in -1..=1 {
                 if dx != 0 || dy != 0 {
-                    total += self.reveal(x + dx, y + dy);
+                    total += self.reveal_unchecked(x + dx, y + dy);
                 }
             }
         }
@@ -441,7 +526,7 @@ mod tests {
     fn first_click_is_safe_for_any_seed() {
         for seed in 0..200 {
             let mut w = World::new(seed, 0.3, 0.3, 0.0);
-            w.reveal(-3, 9);
+            w.reveal(-3, 5);
             assert!(!w.is_game_over(), "seed {seed}");
             assert!(w.score() >= 1);
         }
@@ -450,7 +535,8 @@ mod tests {
     #[test]
     fn works_with_negative_and_huge_coordinates() {
         let mut w = World::new(1, 0.15, 0.3, 200.0);
-        w.reveal(-2_000_000, 2_000_000);
+        w.reveal(-5, 7);
+        w.reveal_unchecked(-2_000_000, 2_000_000);
         assert!(!w.is_game_over());
         let v = w.view(-2_000_005, 1_999_995, 10, 10);
         assert_eq!(v.len(), 300);
@@ -471,7 +557,7 @@ mod tests {
             .flat_map(|x| (-20..20).map(move |y| (x, y)))
             .find(|&(x, y)| w.is_mine(x, y))
             .unwrap();
-        w.reveal(mine.0, mine.1);
+        w.reveal_unchecked(mine.0, mine.1);
         assert!(w.is_game_over());
         let v = w.view(mine.0, mine.1, 1, 1);
         assert_eq!(v[0], ST_MINE | 1);
@@ -538,7 +624,7 @@ mod tests {
         for y in -48..48 {
             for x in -48..48 {
                 if w.is_playable(x, y) && !w.is_mine(x, y) {
-                    w.reveal(x, y);
+                    w.reveal_unchecked(x, y);
                 }
             }
         }
@@ -599,7 +685,7 @@ mod tests {
             .flat_map(|x| (-20..20).map(move |y| (x, y)))
             .find(|&(x, y)| w.is_mine(x, y))
             .unwrap();
-        w.reveal(mine.0, mine.1);
+        w.reveal_unchecked(mine.0, mine.1);
         let mut b = World::new(3, 0.5, 0.5, 0.0);
         assert!(b.import_state(&w.export_state()));
         assert!(b.is_game_over());
@@ -628,5 +714,59 @@ mod tests {
         let depths: Vec<i32> = log.chunks(3).map(|c| c[2]).collect();
         assert!(depths.windows(2).all(|p| p[0] <= p[1]));
         assert!(w.take_reveal_log().is_empty());
+    }
+
+    #[test]
+    fn endless_first_click_must_be_near_the_start() {
+        let mut w = World::new(9, 0.15, 0.15, 0.0);
+        assert!(!w.can_reveal(50, 0));
+        assert_eq!(w.reveal(50, 0), 0);
+        assert_eq!(w.score(), 0);
+        assert!(!w.is_game_over());
+        assert!(w.can_reveal(8, -8));
+        assert!(w.reveal(8, -8) > 0);
+    }
+
+    #[test]
+    fn island_first_click_can_be_anywhere_on_land() {
+        let w = World::new_island(2, 128, 0.15, 0.25);
+        let land = (-64..64)
+            .flat_map(|y| (-64..64).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_playable(x, y) && x.abs() > 30)
+            .unwrap();
+        assert!(w.can_reveal(land.0, land.1));
+    }
+
+    #[test]
+    fn reach_is_three_cells_from_explored_ground() {
+        let mut w = World::new(4, 0.15, 0.15, 0.0);
+        // Only the origin is revealed.
+        assert!(w.import_state(&[1, 1, 0, 0, 1, 0, 0, 0, 0]));
+        for (x, y, ok) in [(3, 0, true), (0, -3, true), (3, 3, true), (4, 0, false), (4, 4, false), (-4, 2, false)] {
+            assert_eq!(w.can_reveal(x, y), ok, "({x}, {y})");
+        }
+        assert!(w.is_out_of_reach(10, 10));
+        assert!(!w.is_out_of_reach(2, 2));
+        assert_eq!(w.reveal(10, 10), 0);
+        assert_eq!(w.score(), 1);
+        // A cell that is already revealed is never "out of reach".
+        assert!(!w.is_out_of_reach(0, 0));
+    }
+
+    #[test]
+    fn points_grow_with_distance_and_farthest_is_tracked() {
+        let mut w = World::new(5, 0.15, 0.15, 0.0);
+        // Revealed: (0,0) worth 1.0 and (30,40) at distance 50 worth 1.5.
+        assert!(w.import_state(&[1, 1, 0, 0, 2, 0, 0, 30, 40, 0, 0]));
+        assert_eq!(w.points(), 2);
+        assert_eq!(w.farthest(), 50);
+        // Live updates match a rebuild from saved state.
+        let mut live = World::new(5, 0.15, 0.15, 0.0);
+        live.reveal(0, 0);
+        let mut rebuilt = World::new(5, 0.15, 0.15, 0.0);
+        assert!(rebuilt.import_state(&live.export_state()));
+        assert_eq!(live.points(), rebuilt.points());
+        assert_eq!(live.farthest(), rebuilt.farthest());
+        assert!(live.points() >= live.score());
     }
 }

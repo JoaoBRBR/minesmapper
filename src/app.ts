@@ -63,6 +63,8 @@ function saveCurrent(withThumb = false): Promise<void> {
     status: s.status,
     cleared: s.cleared,
     total: s.total,
+    points: s.points,
+    farthest: s.farthest,
     elapsedMs: s.elapsedMs,
     cam: s.cam,
     updatedAt: Date.now(),
@@ -92,6 +94,8 @@ async function restartWorld(id: string) {
     status: 'playing',
     cleared: 0,
     total: 0,
+    points: 0,
+    farthest: 0,
     elapsedMs: 0,
     cam: null,
     thumb: null,
@@ -134,7 +138,10 @@ function describe(m: WorldMeta) {
   const c = m.config;
   const pct = m.total ? Math.floor((m.cleared / m.total) * 100) : 0;
   const mode = c.mode === 'island' ? `🏝 Island ${c.size}` : '♾ Endless';
-  const progress = c.mode === 'island' ? `${pct}% cleared` : `${m.cleared} cleared`;
+  const progress =
+    c.mode === 'island'
+      ? `${pct}% cleared`
+      : `★ ${(m.points ?? m.cleared).toLocaleString()} pts · 📏 ${m.farthest ?? 0} away · ${m.cleared} cleared`;
   const time = c.mode === 'island' && m.elapsedMs > 0 ? ` · ${fmtTime(m.elapsedMs)}` : '';
   return { line1: `${mode} · ${c.difficulty}`, line2: `${progress}${time}` };
 }
@@ -286,8 +293,8 @@ function syncCreatorVisibility() {
   const island = modeSeg.get() === 'island';
   el('c-size-wrap').hidden = !island;
   el('c-mode-hint').textContent = island
-    ? 'A finite island surrounded by water. Clear every safe cell to win.'
-    : 'An infinite map. Clear as many cells as you can; mines get denser the farther you go.';
+    ? 'A finite island surrounded by water. Clear every safe cell to win. You can only reveal near explored ground.'
+    : 'An infinite map. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines). You can only reveal near explored ground.';
   el('c-d1-label').firstChild!.textContent = island ? 'Mines at the coast ' : 'Mines far away ';
 }
 
@@ -377,6 +384,8 @@ function bindCreator() {
       status: 'playing',
       cleared: 0,
       total: 0,
+      points: 0,
+      farthest: 0,
       elapsedMs: 0,
       cam: null,
       thumb: null,

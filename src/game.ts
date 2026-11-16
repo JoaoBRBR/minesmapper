@@ -17,6 +17,8 @@ export interface Snapshot {
   state: Int32Array;
   cleared: number;
   total: number;
+  points: number;
+  farthest: number;
   status: Status;
   elapsedMs: number;
   cam: CamState;
@@ -61,6 +63,9 @@ const BANNER_DELAY_MS = { lost: 1400, won: 1200 };
 let ripple: Ripple | null = null;
 let rippleEnd = 0;
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
+/** A refused tap (too far from explored ground), flashed on the map. */
+const DENIED_MS = 500;
+let denied: { x: number; y: number; t0: number } | null = null;
 
 const animationsOn = () => settings.animations && !prefersReducedMotion();
 
@@ -91,6 +96,7 @@ export function loadWorld(
   bannerDismissed = false;
   ripple = null;
   endFx = null;
+  denied = null;
   glide = null;
   pointers.clear();
   $timer.hidden = cfg.mode !== 'island';
@@ -110,6 +116,8 @@ export function snapshot(): Snapshot {
     state: wd.export_state(),
     cleared: wd.score(),
     total: wd.safe_total(),
+    points: wd.points(),
+    farthest: wd.farthest(),
     status,
     elapsedMs: Math.round(elapsedMs),
     cam: { cx: cam.cx, cy: cam.cy, zoom: cam.zoom },
@@ -143,6 +151,7 @@ export function setActive(on: boolean) {
     clearTimeout(pressTimer);
     ripple = null;
     endFx = null;
+    denied = null;
   } else {
     resize();
   }
@@ -253,7 +262,10 @@ function updateHud(now: number) {
     setText($score, `🏝 ${wd.score()} / ${total} (${pct}%) · 💣 ${left}${tail}`);
     setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? now) - startedAt));
   } else {
-    setText($score, `${wd.score()} cleared · ${wd.flag_count()} flags${tail}`);
+    setText(
+      $score,
+      `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()} away · 🚩 ${wd.flag_count()}${tail}`,
+    );
   }
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
@@ -266,7 +278,8 @@ function frame(now: number) {
   stepGlide(now);
   if (ripple && now > rippleEnd) ripple = null;
   if (endFx && now - endFx.t0 > END_MS) endFx = null;
-  if (dirty || ripple || endFx) {
+  if (denied && now - denied.t0 > DENIED_MS) denied = null;
+  if (dirty || ripple || endFx || denied) {
     dirty = false;
     clampCamera();
     render(now);
@@ -286,6 +299,7 @@ function render(now: number) {
   };
   if (!endFx) {
     draw(ctx, wd, cam, w, h, finished ? 'review' : 'play', fx);
+    if (denied) drawDenied(now, denied);
     return;
   }
   // End sequence: fog-of-war map first, then the full-colour map fades in over it.
@@ -297,6 +311,40 @@ function render(now: number) {
     ctx.globalAlpha = 1;
   }
   if (endFx.kind === 'lost') drawShockwave(now, endFx.t0, endFx.origin);
+}
+
+function drawDenied(now: number, d: { x: number; y: number; t0: number }) {
+  const t = (now - d.t0) / DENIED_MS;
+  const sx = (d.x - cam.cx) * cam.zoom + w / 2;
+  const sy = (d.y - cam.cy) * cam.zoom + h / 2;
+  ctx.fillStyle = `rgba(220, 38, 38, ${0.45 * (1 - t)})`;
+  ctx.fillRect(sx, sy, cam.zoom, cam.zoom);
+  ctx.strokeStyle = `rgba(254, 202, 202, ${0.9 * (1 - t)})`;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(sx + 1, sy + 1, cam.zoom - 2, cam.zoom - 2);
+}
+
+let toastTimer = 0;
+function toast(msg: string) {
+  const el_ = el('toast');
+  el_.textContent = msg;
+  el_.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (el_.hidden = true), 2200);
+}
+
+/** Explains and signals a tap that the frontier rule refused. */
+function deny(x: number, y: number) {
+  const wd = world!;
+  denied = { x, y, t0: performance.now() };
+  toast(
+    wd.score() === 0
+      ? 'Start near the center of the map'
+      : `Too far: reveal within ${wd.reach()} cells of explored ground`,
+  );
+  sound.blocked();
+  haptics.blocked();
+  invalidate();
 }
 
 function drawShockwave(now: number, t0: number, origin: [number, number]) {
@@ -333,6 +381,9 @@ function activate(px: number, py: number, forceFlag: boolean) {
     wd.toggle_flag(x, y);
   } else if (isRevealedNumber(x, y)) {
     wd.chord(x, y);
+  } else if (wd.is_out_of_reach(x, y)) {
+    deny(x, y);
+    return;
   } else {
     wd.reveal(x, y);
   }

@@ -454,3 +454,20 @@ input:not([type]) {
 #settings .stack {
   margin-top: 14px;
 }
+
+/* ---- Toast ---- */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: min(92vw, 420px);
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(30, 20, 12, 0.92);
+  color: #fde8e8;
+  font: 600 14px system-ui, sans-serif;
+  text-align: center;
+  z-index: 18;
+  pointer-events: none;
+}

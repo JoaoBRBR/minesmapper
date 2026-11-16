@@ -36,6 +36,10 @@ export interface WorldMeta {
   cleared: number;
   /** Safe cells needed to clear the island (0 in endless mode). */
   total: number;
+  /** Distance-weighted score (endless). Absent in saves made before it existed. */
+  points?: number;
+  /** Farthest revealed distance from the start, in cells (endless). */
+  farthest?: number;
   elapsedMs: number;
   cam: CamState | null;
   /** Small JPEG data URL of the last view. */
