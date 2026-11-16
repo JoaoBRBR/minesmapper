@@ -8,7 +8,8 @@
     "build": "npm run wasm && tsc && vite build",
     "preview": "vite preview",
     "wasm": "wasm-pack build crate --target web --release --out-dir ../src/wasm/pkg --out-name minefield",
-    "test": "cargo test --manifest-path crate/Cargo.toml"
+    "test": "cargo test --manifest-path crate/Cargo.toml",
+    "deploy": "bash scripts/deploy-gh-pages.sh"
   },
   "devDependencies": {
     "typescript": "~7.0.2",
