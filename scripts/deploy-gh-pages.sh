@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# Builds the app locally and publishes dist/ to the `gh-pages` branch (no GitHub Actions needed).
-# Then set the repo's Pages source to: Deploy from a branch -> gh-pages -> / (root).
+# Builds the app and publishes it from `main` itself: the build goes into docs/, is committed,
+# and is pushed. GitHub Pages serves it with: Settings -> Pages -> Deploy from a branch ->
+# main -> /docs. No GitHub Actions needed.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$root"
+cd "$(dirname "$0")/.."
+
+# The build comes from the working tree, so refuse to publish uncommitted source changes.
+if [ -n "$(git status --porcelain -- . ':!docs')" ]; then
+  echo "Uncommitted changes outside docs/. Commit them first, then run the deploy again." >&2
+  exit 1
+fi
+
 npm run build
-remote="$(git remote get-url origin)"
+rm -rf docs
+cp -r dist docs
+touch docs/.nojekyll
+
 rev="$(git rev-parse --short HEAD)"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-cp -r dist/. "$tmp/"
-touch "$tmp/.nojekyll"
-cd "$tmp"
-git init -q -b gh-pages
-git add -A
-git -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" \
-  commit -q -m "Deploy $rev"
-git push -f "$remote" gh-pages
-echo "Published build of $rev to branch gh-pages."
+git add -A docs
+if git diff --cached --quiet; then
+  echo "docs/ is already up to date for $rev."
+else
+  git commit -q -m "Deploy build of $rev"
+  git push origin HEAD
+  echo "Published build of $rev to docs/ on $(git branch --show-current)."
+fi
