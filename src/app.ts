@@ -410,6 +410,7 @@ function bindSettings() {
     ['s-animations', 'animations'],
     ['s-sound', 'sound'],
     ['s-vibration', 'vibration'],
+    ['s-chunks', 'chunkBorders'],
   ] as const;
   for (const [id, key] of rows) {
     const input = el<HTMLInputElement>(id);

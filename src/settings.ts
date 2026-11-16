@@ -4,10 +4,12 @@ export interface Settings {
   animations: boolean;
   sound: boolean;
   vibration: boolean;
+  /** Advanced / debugging: outline the cleanup chunks. */
+  chunkBorders: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false };
 
 function load(): Settings {
   try {
@@ -16,6 +18,7 @@ function load(): Settings {
       animations: typeof raw.animations === 'boolean' ? raw.animations : DEFAULTS.animations,
       sound: typeof raw.sound === 'boolean' ? raw.sound : DEFAULTS.sound,
       vibration: typeof raw.vibration === 'boolean' ? raw.vibration : DEFAULTS.vibration,
+      chunkBorders: typeof raw.chunkBorders === 'boolean' ? raw.chunkBorders : DEFAULTS.chunkBorders,
     };
   } catch {
     return { ...DEFAULTS };

@@ -1,5 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
-import { draw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
@@ -66,6 +66,7 @@ const BANNER_DELAY_MS = { lost: 1400, won: 1200 };
 let ripple: Ripple | null = null;
 let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
+let lastBorders = settings.chunkBorders;
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
 /** A refused tap (too far from explored ground), flashed on the map. */
 const DENIED_MS = 500;
@@ -290,6 +291,10 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   if (!active || !world) return;
   stepGlide(now);
+  if (settings.chunkBorders !== lastBorders) {
+    lastBorders = settings.chunkBorders;
+    invalidate();
+  }
   if (ripple && now > rippleEnd) ripple = null;
   if (endFx && now - endFx.t0 > END_MS) endFx = null;
   if (denied && now - denied.t0 > DENIED_MS) denied = null;
@@ -305,6 +310,11 @@ function frame(now: number) {
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
 function render(now: number) {
+  renderScene(now);
+  if (settings.chunkBorders) drawChunkBorders(ctx, world!, cam, w, h);
+}
+
+function renderScene(now: number) {
   const wd = world!;
   const finished = wd.is_game_over() || wd.is_won();
   const fx: Fx = {

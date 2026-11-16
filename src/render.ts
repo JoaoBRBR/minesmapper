@@ -298,6 +298,62 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.stroke();
 }
 
+/**
+ * Debug overlay: outlines the cleanup chunks, labels them with their chunk coordinates, and
+ * highlights the finished ones (green, with a tick).
+ */
+export function drawChunkBorders(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  cam: Camera,
+  w: number,
+  h: number,
+) {
+  const size = world.clean_chunk_size();
+  const { zoom } = cam;
+  const left = cam.cx - w / 2 / zoom;
+  const top = cam.cy - h / 2 / zoom;
+  const c0 = Math.floor(left / size);
+  const c1 = Math.floor((left + w / zoom) / size);
+  const r0 = Math.floor(top / size);
+  const r1 = Math.floor((top + h / zoom) / size);
+  const sx = (cx: number) => (cx * size - cam.cx) * zoom + w / 2;
+  const sy = (cy: number) => (cy * size - cam.cy) * zoom + h / 2;
+  const labels = size * zoom >= 70;
+
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = '600 11px ui-monospace, monospace';
+  ctx.lineWidth = 2;
+  for (let cy = r0; cy <= r1; cy++) {
+    for (let cx = c0; cx <= c1; cx++) {
+      const x = sx(cx);
+      const y = sy(cy);
+      const side = size * zoom;
+      const clean = world.is_chunk_clean(cx, cy);
+      if (clean) {
+        ctx.fillStyle = 'rgba(80, 255, 140, 0.07)';
+        ctx.fillRect(x, y, side, side);
+      }
+      ctx.setLineDash(clean ? [] : [7, 5]);
+      ctx.strokeStyle = clean ? 'rgba(80, 255, 140, 0.95)' : 'rgba(255, 255, 255, 0.6)';
+      ctx.strokeRect(x + 1, y + 1, side - 2, side - 2);
+      if (labels) {
+        const text = clean ? `✓ ${cx},${cy}` : `${cx},${cy}`;
+        ctx.setLineDash([]);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.strokeText(text, x + 6, y + 5);
+        ctx.fillStyle = clean ? '#86efac' : '#ffffff';
+        ctx.fillText(text, x + 6, y + 5);
+        ctx.lineWidth = 2;
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function drawFlag(ctx: CanvasRenderingContext2D, sx: number, sy: number, z: number) {
   ctx.strokeStyle = '#1f2937';
   ctx.lineWidth = Math.max(1, z * 0.07);

@@ -485,3 +485,15 @@ input:not([type]) {
 #map.targeting {
   cursor: cell;
 }
+
+.adv-title {
+  margin: 16px 0 0;
+  font: 700 12px system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+#settings .dialog {
+  max-height: 92vh;
+  overflow-y: auto;
+}

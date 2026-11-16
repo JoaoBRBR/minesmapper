@@ -444,6 +444,11 @@ impl World {
         }
     }
 
+    /// Whether a cleanup chunk (in chunk units) has been fully cleared.
+    pub fn is_chunk_clean(&self, cx: i32, cy: i32) -> bool {
+        self.clean_chunks.contains(&(cx, cy))
+    }
+
     /// Side length (cells) of a cleanup chunk.
     pub fn clean_chunk_size(&self) -> i32 {
         CLEAN_CHUNK
