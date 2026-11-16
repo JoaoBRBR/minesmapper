@@ -19,6 +19,9 @@ use wasm_bindgen::prelude::*;
 /// Terrain chunks kept in memory before the cache is flushed.
 const MAX_CACHED_CHUNKS: usize = 4096;
 
+/// Max cells recorded per action in the reveal log (the log only drives animation).
+const MAX_LOG: usize = 60_000;
+
 /// Safety valve: a single click never reveals more than this many cells.
 const MAX_FLOOD: usize = 100_000;
 
@@ -51,6 +54,8 @@ pub struct World {
     exploded: HashSet<(i32, i32)>,
     game_over: bool,
     won: bool,
+    /// `(x, y, depth)` triples for cells revealed since the last `take_reveal_log`.
+    reveal_log: Vec<i32>,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -77,6 +82,7 @@ impl World {
             exploded: HashSet::new(),
             game_over: false,
             won: false,
+            reveal_log: Vec::new(),
             island: None,
             mines_total: 0,
         }
@@ -201,6 +207,7 @@ impl World {
         self.revealed = revealed;
         self.flagged = flagged;
         self.exploded = exploded;
+        self.reveal_log.clear();
         self.recount_mines();
         true
     }
@@ -282,9 +289,9 @@ impl World {
             self.game_over = true;
             return 0;
         }
-        let mut queue = VecDeque::from([(x, y)]);
+        let mut queue = VecDeque::from([(x, y, 0i32)]);
         let mut count = 0u32;
-        while let Some((cx, cy)) = queue.pop_front() {
+        while let Some((cx, cy, depth)) = queue.pop_front() {
             if !self.is_playable(cx, cy)
                 || self.revealed.contains(&(cx, cy))
                 || self.flagged.contains(&(cx, cy))
@@ -294,10 +301,13 @@ impl World {
             }
             self.revealed.insert((cx, cy));
             count += 1;
+            if self.reveal_log.len() < MAX_LOG * 3 {
+                self.reveal_log.extend([cx, cy, depth]);
+            }
             if self.adjacent(cx, cy) == 0 && self.revealed.len() < MAX_FLOOD {
                 for dy in -1..=1 {
                     for dx in -1..=1 {
-                        queue.push_back((cx + dx, cy + dy));
+                        queue.push_back((cx + dx, cy + dy, depth + 1));
                     }
                 }
             }
@@ -306,6 +316,12 @@ impl World {
             self.won = true;
         }
         count
+    }
+
+    /// Cells revealed since the last call, as `(x, y, depth)` triples where
+    /// `depth` is the flood-fill distance from the clicked cell (for animation).
+    pub fn take_reveal_log(&mut self) -> Vec<i32> {
+        std::mem::take(&mut self.reveal_log)
     }
 
     /// Toggles a flag on a hidden cell. Returns true if the cell is now flagged.
@@ -599,5 +615,18 @@ mod tests {
         assert!(!w.import_state(&[1, 0, 0, 0, 0, 0, 0, 7]));
         assert!(w.import_state(&[1, 0, 0, 0, 0, 0, 0]));
         assert_eq!(w.score(), 0);
+    }
+
+    #[test]
+    fn reveal_log_records_order_and_depth() {
+        let mut w = World::new(1, 0.0, 0.0, 0.0);
+        let n = w.reveal(0, 0);
+        let log = w.take_reveal_log();
+        assert_eq!(log.len() as u32, n.min(MAX_LOG as u32) * 3);
+        assert_eq!(&log[..3], &[0, 0, 0]);
+        // depths never decrease (breadth-first)
+        let depths: Vec<i32> = log.chunks(3).map(|c| c[2]).collect();
+        assert!(depths.windows(2).all(|p| p[0] <= p[1]));
+        assert!(w.take_reveal_log().is_empty());
     }
 }

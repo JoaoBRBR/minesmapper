@@ -1,5 +1,8 @@
 import type { World } from './wasm/pkg/minefield';
-import { draw, screenToCell, MIN_ZOOM, MAX_ZOOM, type Camera } from './render';
+import { draw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, type Camera, type Fx, type Ripple } from './render';
+import { haptics } from './haptics';
+import { prefersReducedMotion, settings } from './settings';
+import { sound } from './sound';
 import { makeWorld } from './config';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -52,6 +55,15 @@ let endedAt: number | null = null;
 let bannerKey = '';
 let bannerDismissed = false;
 
+// Transient effects (see render.ts `Fx`).
+const END_MS = 1500;
+const BANNER_DELAY_MS = { lost: 1400, won: 1200 };
+let ripple: Ripple | null = null;
+let rippleEnd = 0;
+let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
+
+const animationsOn = () => settings.animations && !prefersReducedMotion();
+
 export function initGame(callbacks: GameCallbacks) {
   cb = callbacks;
   window.addEventListener('resize', resize);
@@ -77,6 +89,8 @@ export function loadWorld(
   endedAt = finished ? elapsedMs : null;
   bannerKey = '';
   bannerDismissed = false;
+  ripple = null;
+  endFx = null;
   glide = null;
   pointers.clear();
   $timer.hidden = cfg.mode !== 'island';
@@ -127,6 +141,8 @@ export function setActive(on: boolean) {
     bannerKey = '';
     pointers.clear();
     clearTimeout(pressTimer);
+    ripple = null;
+    endFx = null;
   } else {
     resize();
   }
@@ -202,7 +218,7 @@ function setText(node: HTMLElement, text: string) {
   if (node.textContent !== text) node.textContent = text;
 }
 
-function updateBanner() {
+function updateBanner(now: number) {
   const wd = world!;
   const key = wd.is_won() ? 'won' : wd.is_game_over() ? 'lost' : '';
   if (key !== bannerKey) {
@@ -217,7 +233,9 @@ function updateBanner() {
       $bannerSub.textContent = `You cleared ${wd.score()} cells`;
     }
   }
-  $banner.hidden = key === '' || bannerDismissed;
+  // Give the loss/win animation time to play before the dialog appears.
+  const ready = !endFx || now - endFx.t0 >= BANNER_DELAY_MS[endFx.kind];
+  $banner.hidden = key === '' || bannerDismissed || !ready;
 }
 
 function updateHud(now: number) {
@@ -239,20 +257,65 @@ function updateHud(now: number) {
   }
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
-  updateBanner();
+  updateBanner(now);
 }
 
 function frame(now: number) {
   requestAnimationFrame(frame);
   if (!active || !world) return;
   stepGlide(now);
-  if (dirty) {
+  if (ripple && now > rippleEnd) ripple = null;
+  if (endFx && now - endFx.t0 > END_MS) endFx = null;
+  if (dirty || ripple || endFx) {
     dirty = false;
     clampCamera();
-    const finished = world.is_game_over() || world.is_won();
-    draw(ctx, world, cam, w, h, finished ? 'review' : 'play');
+    render(now);
   }
   updateHud(now);
+}
+
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+
+function render(now: number) {
+  const wd = world!;
+  const finished = wd.is_game_over() || wd.is_won();
+  const fx: Fx = {
+    now,
+    ripple,
+    mines: endFx?.kind === 'lost' ? { t0: endFx.t0, origin: endFx.origin } : null,
+  };
+  if (!endFx) {
+    draw(ctx, wd, cam, w, h, finished ? 'review' : 'play', fx);
+    return;
+  }
+  // End sequence: fog-of-war map first, then the full-colour map fades in over it.
+  draw(ctx, wd, cam, w, h, 'play', fx);
+  const p = clamp01((now - endFx.t0 - 150) / 900);
+  if (p > 0) {
+    ctx.globalAlpha = p * p * (3 - 2 * p);
+    draw(ctx, wd, cam, w, h, 'review', { ...fx, ripple: null });
+    ctx.globalAlpha = 1;
+  }
+  if (endFx.kind === 'lost') drawShockwave(now, endFx.t0, endFx.origin);
+}
+
+function drawShockwave(now: number, t0: number, origin: [number, number]) {
+  const t = (now - t0) / 700;
+  if (t >= 1) return;
+  const sx = (origin[0] + 0.5 - cam.cx) * cam.zoom + w / 2;
+  const sy = (origin[1] + 0.5 - cam.cy) * cam.zoom + h / 2;
+  ctx.strokeStyle = `rgba(255, 190, 110, ${0.85 * (1 - t)})`;
+  ctx.lineWidth = 1 + 7 * (1 - t);
+  ctx.beginPath();
+  ctx.arc(sx, sy, t * cam.zoom * 14, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function shake() {
+  canvas.classList.remove('shake');
+  void canvas.offsetWidth; // restart the CSS animation
+  canvas.classList.add('shake');
+  setTimeout(() => canvas.classList.remove('shake'), 480);
 }
 
 // --- Actions ----------------------------------------------------------------------------
@@ -265,6 +328,7 @@ function isRevealedNumber(x: number, y: number): boolean {
 function activate(px: number, py: number, forceFlag: boolean) {
   const wd = world!;
   const [x, y] = screenToCell(cam, w, h, px, py);
+  const before = { score: wd.score(), flags: wd.flag_count(), over: wd.is_game_over(), won: wd.is_won() };
   if (forceFlag || flagMode) {
     wd.toggle_flag(x, y);
   } else if (isRevealedNumber(x, y)) {
@@ -272,8 +336,67 @@ function activate(px: number, py: number, forceFlag: boolean) {
   } else {
     wd.reveal(x, y);
   }
+  feedback(before, x, y);
   invalidate();
   cb.onChange();
+}
+
+/** Sounds, vibration and animations for whatever the last action did. */
+function feedback(
+  before: { score: number; flags: number; over: boolean; won: boolean },
+  x: number,
+  y: number,
+) {
+  const wd = world!;
+  const now = performance.now();
+  const log = wd.take_reveal_log();
+  const revealed = wd.score() - before.score;
+  const flagDelta = wd.flag_count() - before.flags;
+  const animate = animationsOn();
+
+  // Cells that opened: ripple outward from the click (breadth-first depth = delay).
+  let rippleMs = 0;
+  if (revealed > 0 && log.length >= 3) {
+    const n = log.length / 3;
+    const maxDepth = log[log.length - 1];
+    const step = Math.min(24, 700 / Math.max(1, maxDepth));
+    rippleMs = maxDepth * step;
+    if (animate) {
+      const r: Ripple = { xs: new Array(n), ys: new Array(n), t0: new Array(n) };
+      for (let i = 0; i < n; i++) {
+        r.xs[i] = log[i * 3];
+        r.ys[i] = log[i * 3 + 1];
+        r.t0[i] = now + log[i * 3 + 2] * step;
+      }
+      ripple = r;
+      rippleEnd = now + rippleMs + RIPPLE_MS;
+    }
+  }
+
+  if (!before.over && wd.is_game_over()) {
+    sound.boom();
+    haptics.boom();
+    if (animate) {
+      endFx = { kind: 'lost', t0: now, origin: [x, y] };
+      shake();
+    }
+  } else if (!before.won && wd.is_won()) {
+    sound.win();
+    haptics.win();
+    if (animate) endFx = { kind: 'won', t0: now, origin: [x, y] };
+  } else if (revealed === 1) {
+    sound.tick();
+  } else if (revealed > 1) {
+    sound.open(rippleMs + 120);
+    if (revealed > 15) haptics.open();
+  }
+
+  if (flagDelta > 0) {
+    sound.flag();
+    haptics.flag();
+  } else if (flagDelta < 0) {
+    sound.unflag();
+  }
 }
 
 // --- Pointer input: drag to pan, tap to reveal, long-press/right-click to flag, pinch to zoom.
@@ -305,7 +428,6 @@ canvas.addEventListener('pointerdown', (e) => {
       pressTimer = window.setTimeout(() => {
         if (!dragged && pointers.size === 1) {
           longPressed = true;
-          navigator.vibrate?.(15);
           activate(e.clientX, e.clientY, true);
         }
       }, LONG_PRESS_MS);
@@ -372,7 +494,7 @@ function toggleFlagMode() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (!active || e.target instanceof HTMLInputElement) return;
+  if (!active || e.target instanceof HTMLInputElement || !el('settings').hidden) return;
   if (e.key === 'f' || e.key === 'F') toggleFlagMode();
   if (e.key === 'c' || e.key === 'C' || e.key === 'Home') recenter();
   if (e.key === 'Escape') cb.onMenu();

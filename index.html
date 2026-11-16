@@ -42,8 +42,32 @@
         <div class="stack">
           <button id="p-resume" class="primary">▶ Resume</button>
           <button id="p-restart">↻ Restart this world</button>
+          <button id="p-settings">⚙ Settings</button>
           <button id="p-exit">⌂ Save &amp; exit to menu</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Settings (stored on this device) -->
+    <div id="settings" class="overlay" hidden>
+      <div class="dialog" role="dialog" aria-labelledby="settings-title">
+        <div class="dialog-title" id="settings-title">Settings</div>
+        <label class="switch">
+          <b>Reveal animations</b>
+          <input type="checkbox" id="s-animations" />
+          <small id="s-animations-hint">Cells ripple open; mines pop when you lose.</small>
+        </label>
+        <label class="switch">
+          <b>Sound effects</b>
+          <input type="checkbox" id="s-sound" />
+          <small>Clicks, flags, explosions and a victory chime.</small>
+        </label>
+        <label class="switch" id="s-vibration-row">
+          <b>Vibration</b>
+          <input type="checkbox" id="s-vibration" />
+          <small id="s-vibration-hint">Short buzzes for flags, mines and wins.</small>
+        </label>
+        <div class="stack"><button id="s-close" class="primary">Done</button></div>
       </div>
     </div>
 
@@ -57,6 +81,7 @@
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-settings" aria-label="Settings">⚙ Settings</button>
         </div>
         <h2>Your worlds</h2>
         <div id="worlds"></div>

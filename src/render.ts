@@ -81,6 +81,32 @@ const paletteIndex = (biome: number, shade: number) => biome * SHADE_LEVELS + (s
 
 const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12', '#0e7490', '#111827', '#525252'];
 
+/** Cell reveal ripple (parallel arrays; `t0` is the start time of each cell's pop, in ms). */
+export interface Ripple {
+  xs: number[];
+  ys: number[];
+  t0: number[];
+}
+
+/** Transient effects layered over the map. */
+export interface Fx {
+  now: number;
+  ripple?: Ripple | null;
+  /** Loss sequence: mines pop outward from `origin`, starting at `t0`. */
+  mines?: { t0: number; origin: [number, number] } | null;
+}
+
+export const RIPPLE_MS = 300;
+const MINE_POP_DELAY_MS = 300;
+const MINE_POP_STEP_MS = 14;
+const MINE_POP_MAX_DELAY_MS = 1100;
+const MINE_POP_MS = 260;
+
+const easeOutBack = (t: number) => {
+  const c1 = 1.70158;
+  return 1 + (c1 + 1) * (t - 1) ** 3 + c1 * (t - 1) ** 2;
+};
+
 export function screenToCell(cam: Camera, w: number, h: number, px: number, py: number): [number, number] {
   return [Math.floor((px - w / 2) / cam.zoom + cam.cx), Math.floor((py - h / 2) / cam.zoom + cam.cy)];
 }
@@ -92,6 +118,7 @@ export function draw(
   w: number,
   h: number,
   view: ViewMode = 'play',
+  fx?: Fx,
 ) {
   const { zoom } = cam;
   const x0 = Math.floor(cam.cx - w / 2 / zoom);
@@ -170,7 +197,16 @@ export function draw(
         } else if (state === ST_FLAG) {
           drawFlag(ctx, sx, sy, zoom);
         } else if (state === ST_MINE) {
-          drawMine(ctx, mx, my, zoom, (b & 1) === 1);
+          const exploded = (b & 1) === 1;
+          let scale = 1;
+          if (fx?.mines && !exploded) {
+            const [ox, oy] = fx.mines.origin;
+            const dist = Math.hypot(x0 + c - ox, y0 + r - oy);
+            const delay = MINE_POP_DELAY_MS + Math.min(MINE_POP_MAX_DELAY_MS, dist * MINE_POP_STEP_MS);
+            const t = (fx.now - fx.mines.t0 - delay) / MINE_POP_MS;
+            scale = t <= 0 ? 0 : easeOutBack(Math.min(1, t));
+          }
+          if (scale > 0) drawMine(ctx, mx, my, zoom * scale, exploded);
         }
       }
     }
@@ -185,6 +221,30 @@ export function draw(
         }
       }
     }
+  }
+
+  // Reveal ripple: cells still "opening" are covered by fog that fades out with a flash.
+  if (fx?.ripple) {
+    const { xs, ys, t0 } = fx.ripple;
+    for (let i = 0; i < xs.length; i++) {
+      const p = (fx.now - t0[i]) / RIPPLE_MS;
+      if (p >= 1) continue;
+      const c = xs[i] - x0;
+      const r = ys[i] - y0;
+      if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+      const k = (r * cols + c) * 3;
+      const sx = px(xs[i]);
+      const sy = py(ys[i]);
+      ctx.fillStyle = FOGGED[paletteIndex(data[k + 1], data[k + 2])];
+      ctx.globalAlpha = p <= 0 ? 1 : 1 - p;
+      ctx.fillRect(sx, sy, size, size);
+      if (p > 0) {
+        ctx.fillStyle = '#fff';
+        ctx.globalAlpha = 0.35 * (1 - p) * p * 4; // brightest mid-pop
+        ctx.fillRect(sx, sy, size, size);
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   if (view !== 'preview') drawVignette(ctx, w, h);

@@ -1,5 +1,8 @@
 import init from './wasm/pkg/minefield';
 import { setBackground } from './background';
+import { haptics, vibrationSupported } from './haptics';
+import { prefersReducedMotion, setSetting, settings } from './settings';
+import { sound } from './sound';
 import { draw } from './render';
 import { DIFFICULTIES, ISLAND_SIZES, makeWorld, randomSeed, seedFromText } from './config';
 import { fmtTime, initGame, loadWorld, setActive, snapshot, thumbnail } from './game';
@@ -389,6 +392,50 @@ function bindCreator() {
   });
 }
 
+// --- Settings dialog --------------------------------------------------------------------
+
+const $settings = el('settings');
+
+function bindSettings() {
+  const rows = [
+    ['s-animations', 'animations'],
+    ['s-sound', 'sound'],
+    ['s-vibration', 'vibration'],
+  ] as const;
+  for (const [id, key] of rows) {
+    const input = el<HTMLInputElement>(id);
+    input.checked = settings[key];
+    input.addEventListener('change', () => {
+      setSetting(key, input.checked);
+      // Give immediate feedback when something is switched on.
+      if (input.checked && key === 'sound') sound.test();
+      if (input.checked && key === 'vibration') haptics.test();
+    });
+  }
+  if (!vibrationSupported) {
+    el<HTMLInputElement>('s-vibration').disabled = true;
+    el('s-vibration-row').classList.add('disabled');
+    el('s-vibration-hint').textContent = 'Not supported by this browser (for example iPhone Safari).';
+  }
+  if (prefersReducedMotion()) {
+    el('s-animations-hint').textContent = 'Off automatically: your device asks to reduce motion.';
+  }
+  const open = () => ($settings.hidden = false);
+  const close = () => ($settings.hidden = true);
+  el('h-settings').addEventListener('click', open);
+  el('p-settings').addEventListener('click', open);
+  el('s-close').addEventListener('click', close);
+  $settings.addEventListener('click', (e) => {
+    if (e.target === $settings) close();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$settings.hidden) {
+      e.stopPropagation();
+      close();
+    }
+  });
+}
+
 // --- Boot -------------------------------------------------------------------------------
 
 export async function start() {
@@ -396,6 +443,7 @@ export async function start() {
   requestPersistence();
   initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
   bindCreator();
+  bindSettings();
 
   el('h-new').addEventListener('click', () => void openCreator());
   el('p-resume').addEventListener('click', closePause);

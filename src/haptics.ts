@@ -1,0 +1,16 @@
+import { settings } from './settings';
+
+/** True where the Vibration API exists (Android browsers; not iPhone Safari). */
+export const vibrationSupported = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+
+function buzz(pattern: number | number[]) {
+  if (settings.vibration && vibrationSupported) navigator.vibrate(pattern);
+}
+
+export const haptics = {
+  flag: () => buzz(18),
+  open: () => buzz(10),
+  boom: () => buzz([70, 40, 140]),
+  win: () => buzz([30, 50, 30, 50, 90]),
+  test: () => buzz(40),
+};
