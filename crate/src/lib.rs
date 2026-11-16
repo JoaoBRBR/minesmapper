@@ -67,6 +67,14 @@ fn powerup_rate(density: f32) -> f64 {
     POWERUP_RATE[POWERUP_RATE.len() - 1].1
 }
 
+/// Side of a "cleanup chunk": when every safe cell in one is revealed, the numbers, flags
+/// and mines inside it (away from unfinished ground) are tidied away.
+const CLEAN_CHUNK: i32 = 16;
+
+fn clean_key(x: i32, y: i32) -> (i32, i32) {
+    (x.div_euclid(CLEAN_CHUNK), y.div_euclid(CLEAN_CHUNK))
+}
+
 /// Max cells recorded per action in the reveal log (the log only drives animation).
 const MAX_LOG: usize = 60_000;
 
@@ -78,6 +86,8 @@ const MAX_FLOOD: usize = 100_000;
 pub const ST_HIDDEN: u8 = 0x00;
 pub const ST_FLAG: u8 = 0x10;
 pub const ST_REVEALED: u8 = 0x20;
+/// Set on a cell inside a tidied-up area: draw it as plain cleared ground (bit 7).
+pub const ST_CLEAN: u8 = 0x80;
 /// Set on a revealed cell that held a power-up (bit 6, outside the state/count bits).
 pub const ST_POWERUP: u8 = 0x40;
 pub const ST_MINE: u8 = 0x30; // low bit 1 = exploded, 0 = shown after loss
@@ -112,6 +122,11 @@ pub struct World {
     /// Power-ups found (revealed cells that hid one) and spent.
     powerups_found: u32,
     powerups_used: u32,
+    /// Per cleanup chunk: (safe cells in it, safe cells revealed so far).
+    chunk_stats: HashMap<(i32, i32), (u16, u16)>,
+    clean_chunks: HashSet<(i32, i32)>,
+    /// Chunks that became clean since the last `take_clean_log` (`cx, cy` pairs).
+    clean_log: Vec<i32>,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -143,6 +158,9 @@ impl World {
             farthest: 0.0,
             powerups_found: 0,
             powerups_used: 0,
+            chunk_stats: HashMap::new(),
+            clean_chunks: HashSet::new(),
+            clean_log: Vec::new(),
             island: None,
             mines_total: 0,
         }
@@ -285,6 +303,9 @@ impl World {
         self.reveal_log.clear();
         self.recompute_score();
         self.recount_mines();
+        if self.won {
+            self.tidy_whole_island();
+        }
         true
     }
 
@@ -331,6 +352,7 @@ impl World {
             && self.is_playable(x, y)
             && !self.revealed.contains(&(x, y))
             && !self.flagged.contains(&(x, y))
+            && !self.is_settled(x, y)
             && !self.can_reveal(x, y)
     }
 
@@ -338,12 +360,98 @@ impl World {
         self.points = 0.0;
         self.farthest = 0.0;
         let revealed: Vec<(i32, i32)> = self.revealed.iter().copied().collect();
+        // Rebuild the tidy-up bookkeeping from the revealed cells.
+        self.chunk_stats.clear();
+        self.clean_chunks.clear();
+        self.clean_log.clear();
+        let mut per_chunk: HashMap<(i32, i32), u16> = HashMap::new();
+        for &(x, y) in &revealed {
+            *per_chunk.entry(clean_key(x, y)).or_insert(0) += 1;
+        }
+        for (k, n) in per_chunk {
+            let total = self.chunk_safe_total(k);
+            self.chunk_stats.insert(k, (total, n));
+            if total > 0 && n >= total {
+                self.clean_chunks.insert(k);
+            }
+        }
         self.powerups_found = revealed.iter().filter(|&&(x, y)| self.is_powerup(x, y)).count() as u32;
         for (x, y) in revealed {
             let d = dist_from_origin(x, y);
             self.points += cell_points(d);
             self.farthest = self.farthest.max(d);
         }
+    }
+
+    /// Playable, non-mine cells in a cleanup chunk.
+    fn chunk_safe_total(&self, k: (i32, i32)) -> u16 {
+        let mut n = 0;
+        for y in k.1 * CLEAN_CHUNK..(k.1 + 1) * CLEAN_CHUNK {
+            for x in k.0 * CLEAN_CHUNK..(k.0 + 1) * CLEAN_CHUNK {
+                if self.is_playable(x, y) && !self.is_mine(x, y) {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    /// Counts a newly revealed safe cell towards its chunk, marking the chunk
+    /// clean when it was the last one.
+    fn note_revealed(&mut self, x: i32, y: i32) {
+        let k = clean_key(x, y);
+        if !self.chunk_stats.contains_key(&k) {
+            let total = self.chunk_safe_total(k);
+            self.chunk_stats.insert(k, (total, 0));
+        }
+        let stat = self.chunk_stats.get_mut(&k).unwrap();
+        stat.1 += 1;
+        if stat.1 >= stat.0 && self.clean_chunks.insert(k) {
+            self.clean_log.extend([k.0, k.1]);
+        }
+    }
+
+    /// A cell is tidied away when its chunk is clean and every neighbour outside the
+    /// chunk is also clean (or not part of the game), so nothing next to unfinished
+    /// ground ever loses information the player still needs.
+    pub fn is_settled(&self, x: i32, y: i32) -> bool {
+        let k = clean_key(x, y);
+        if !self.clean_chunks.contains(&k) || !self.is_playable(x, y) {
+            return false;
+        }
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let (nx, ny) = (x + dx, y + dy);
+                let nk = clean_key(nx, ny);
+                if nk != k && !self.clean_chunks.contains(&nk) && self.is_playable(nx, ny) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// On a win the whole island is spotless, including chunks that held only mines
+    /// (nothing to reveal, so they never completed on their own).
+    fn tidy_whole_island(&mut self) {
+        let Some(island) = &self.island else { return };
+        let h = island.half();
+        let (lo, hi) = (clean_key(-h, -h), clean_key(h - 1, h - 1));
+        for cy in lo.1..=hi.1 {
+            for cx in lo.0..=hi.0 {
+                self.clean_chunks.insert((cx, cy));
+            }
+        }
+    }
+
+    /// Side length (cells) of a cleanup chunk.
+    pub fn clean_chunk_size(&self) -> i32 {
+        CLEAN_CHUNK
+    }
+
+    /// Chunks that finished since the last call, as `(cx, cy)` pairs in chunk units.
+    pub fn take_clean_log(&mut self) -> Vec<i32> {
+        std::mem::take(&mut self.clean_log)
     }
 
     /// Whether a (safe) cell hides a power-up. Deterministic from the seed.
@@ -377,6 +485,7 @@ impl World {
             || self.won
             || !self.is_playable(x, y)
             || self.revealed.contains(&(x, y))
+            || self.is_settled(x, y)
             || !self.can_reveal(x, y)
         {
             return 3;
@@ -460,6 +569,10 @@ impl World {
 
     /// `reveal` without the frontier rule (chording, and tests).
     fn reveal_unchecked(&mut self, x: i32, y: i32) -> u32 {
+        // Tidied-up ground is inert: a mine hidden there can no longer be tapped.
+        if self.is_settled(x, y) {
+            return 0;
+        }
         if self.game_over
             || self.won
             || !self.is_playable(x, y)
@@ -495,6 +608,7 @@ impl World {
             if self.is_powerup(cx, cy) {
                 self.powerups_found += 1;
             }
+            self.note_revealed(cx, cy);
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -508,6 +622,7 @@ impl World {
         }
         if self.island.is_some() && self.revealed.len() as u32 >= self.safe_total() {
             self.won = true;
+            self.tidy_whole_island();
         }
         count
     }
@@ -524,6 +639,7 @@ impl World {
             || self.won
             || !self.is_playable(x, y)
             || self.revealed.contains(&(x, y))
+            || self.is_settled(x, y)
         {
             return false;
         }
@@ -547,7 +663,9 @@ impl World {
         let mut flags = 0;
         for dy in -1..=1 {
             for dx in -1..=1 {
-                if self.flagged.contains(&(x + dx, y + dy)) {
+                let p = (x + dx, y + dy);
+                // Mines hidden inside tidied-up ground count as marked.
+                if self.flagged.contains(&p) || (self.is_settled(p.0, p.1) && self.is_mine(p.0, p.1)) {
                     flags += 1;
                 }
             }
@@ -572,11 +690,20 @@ impl World {
         let mut out = Vec::with_capacity((w * h * 3) as usize);
         let mut last_key = (i32::MIN, i32::MIN);
         let mut chunk: Rc<Vec<u8>> = Rc::new(Vec::new());
+        let mut last_clean = (i32::MIN, i32::MIN, false);
         for y in y0..y0 + h as i32 {
             for x in x0..x0 + w as i32 {
                 let p = (x, y);
+                let ck = clean_key(x, y);
+                if (ck.0, ck.1) != (last_clean.0, last_clean.1) {
+                    last_clean = (ck.0, ck.1, self.clean_chunks.contains(&ck));
+                }
+                // On a loss everything is shown, including mines in tidied-up areas.
+                let settled = !self.game_over && last_clean.2 && self.is_settled(x, y);
                 let state = if self.exploded.contains(&p) {
                     ST_MINE | 1
+                } else if settled {
+                    ST_CLEAN | ST_REVEALED
                 } else if self.revealed.contains(&p) {
                     ST_REVEALED | self.adjacent(x, y) | if self.is_powerup(x, y) { ST_POWERUP } else { 0 }
                 } else if self.game_over && self.is_mine(x, y) {
@@ -1019,5 +1146,114 @@ mod tests {
         // A v2 save must carry the spent counter.
         assert!(!w.import_state(&[2, 1, 0, 0, 1, 0, 0, 0, 0]));
         assert!(w.import_state(&[2, 1, 0, 0, 1, 0, 0, 0, 0, 0]));
+    }
+
+    /// Reveals every safe cell in the given cell rectangle (bypassing the frontier rule).
+    fn clear_area(w: &mut World, x0: i32, y0: i32, x1: i32, y1: i32) {
+        for y in y0..y1 {
+            for x in x0..x1 {
+                if w.is_playable(x, y) && !w.is_mine(x, y) {
+                    w.reveal_unchecked(x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_fully_cleared_chunk_is_tidied_away_except_next_to_unfinished_ground() {
+        let mut w = World::new(12, 0.2, 0.2, 0.0);
+        w.reveal(0, 0);
+        // Clear a 3x3 block of cleanup chunks: cells -16..32 on both axes.
+        clear_area(&mut w, -16, -16, 32, 32);
+        assert!(!w.is_game_over());
+        for k in [(0, 0), (-1, -1), (1, 1), (-1, 1)] {
+            assert!(w.clean_chunks.contains(&k), "chunk {k:?} should be clean");
+        }
+        // Centre chunk: every cell (even on its border) has only clean neighbours.
+        for (x, y) in [(8, 8), (0, 0), (15, 15), (0, 15)] {
+            assert!(w.is_settled(x, y), "({x},{y})");
+        }
+        // The outer ring touches chunks that are not finished, so its far edge stays as is.
+        assert!(!w.is_settled(-16, -16));
+        assert!(!w.is_settled(31, 8));
+        // A mine inside the tidied area is drawn as plain ground and is inert.
+        let mine = (0..16)
+            .flat_map(|y| (0..16).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_mine(x, y))
+            .expect("a mine in the centre chunk");
+        assert_eq!(w.view(mine.0, mine.1, 1, 1)[0], ST_CLEAN | ST_REVEALED);
+        assert_eq!(w.reveal(mine.0, mine.1), 0);
+        assert!(!w.is_game_over());
+        assert!(!w.toggle_flag(mine.0, mine.1));
+        // A numbered cell inside shows no number, one on the unfinished rim still does.
+        let rim = w.view(-16, -16, 1, 1)[0];
+        assert_eq!(rim & ST_CLEAN, 0);
+    }
+
+    #[test]
+    fn newly_clean_chunks_are_logged_once() {
+        let mut w = World::new(12, 0.2, 0.2, 0.0);
+        w.reveal(0, 0);
+        clear_area(&mut w, 0, 0, 16, 16);
+        let log = w.take_clean_log();
+        assert!(log.chunks(2).any(|c| c == [0, 0]), "{log:?}");
+        assert!(w.take_clean_log().is_empty());
+    }
+
+    #[test]
+    fn tidy_state_survives_a_save_and_load() {
+        let mut a = World::new(12, 0.2, 0.2, 0.0);
+        a.reveal(0, 0);
+        clear_area(&mut a, -16, -16, 32, 32);
+        let mut b = World::new(12, 0.2, 0.2, 0.0);
+        assert!(b.import_state(&a.export_state()));
+        assert_eq!(a.view(-20, -20, 56, 56), b.view(-20, -20, 56, 56));
+        assert!(b.take_clean_log().is_empty());
+    }
+
+    #[test]
+    fn a_won_island_is_completely_tidy_and_a_lost_world_shows_everything() {
+        let mut w = World::new_island(3, 96, 0.12, 0.2);
+        w.reveal(0, 0);
+        clear_area(&mut w, -48, -48, 48, 48);
+        assert!(w.is_won());
+        for y in -48..48 {
+            for x in -48..48 {
+                if w.is_playable(x, y) {
+                    assert!(w.is_settled(x, y), "({x},{y})");
+                    assert_eq!(w.view(x, y, 1, 1)[0] & ST_CLEAN, ST_CLEAN);
+                }
+            }
+        }
+        // On a loss, tidy-up is suspended so every mine is visible.
+        let mut l = World::new(12, 0.2, 0.2, 0.0);
+        l.reveal(0, 0);
+        clear_area(&mut l, -16, -16, 32, 32);
+        let mine = (0..16)
+            .flat_map(|y| (0..16).map(move |x| (x, y)))
+            .find(|&(x, y)| l.is_mine(x, y))
+            .unwrap();
+        l.exploded.insert((40, 40));
+        l.game_over = true;
+        assert_eq!(l.view(mine.0, mine.1, 1, 1)[0] & ST_CLEAN, 0);
+        assert_eq!(l.view(mine.0, mine.1, 1, 1)[0] & 0x30, ST_MINE);
+    }
+
+    #[test]
+    fn chording_counts_mines_hidden_in_tidied_ground() {
+        let mut w = World::new(12, 0.2, 0.2, 0.0);
+        w.reveal(0, 0);
+        clear_area(&mut w, -16, -16, 32, 32);
+        // A tidied mine counts as marked even though the player never flagged it.
+        let mine = (0..16)
+            .flat_map(|y| (0..16).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_mine(x, y) && w.is_settled(x, y))
+            .unwrap();
+        assert!(!w.flagged.contains(&mine));
+        // Chording on an adjacent revealed number must not blow up or panic.
+        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            w.chord(mine.0 + dx, mine.1 + dy);
+        }
+        assert!(!w.is_game_over());
     }
 }

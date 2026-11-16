@@ -18,6 +18,8 @@ const ST_REVEALED = 0x20;
 const ST_MINE = 0x30;
 /** Hidden + low nibble 0xF: unplayable water around the island. */
 const ST_VOID = 0x0f;
+/** Bit 7: cell is inside a tidied-up area - plain ground, no glyphs or grid. */
+const ST_CLEAN = 0x80;
 /** Bit 6 on a revealed cell: it held a power-up. */
 const ST_POWERUP = 0x40;
 
@@ -94,11 +96,14 @@ export interface Ripple {
 export interface Fx {
   now: number;
   ripple?: Ripple | null;
+  /** Chunks that were just finished: a shimmer sweeps over them (cell coordinates). */
+  cleanups?: { x: number; y: number; size: number; t0: number }[];
   /** Loss sequence: mines pop outward from `origin`, starting at `t0`. */
   mines?: { t0: number; origin: [number, number] } | null;
 }
 
 export const RIPPLE_MS = 300;
+export const CLEAN_FX_MS = 900;
 const MINE_POP_DELAY_MS = 300;
 const MINE_POP_STEP_MS = 14;
 const MINE_POP_MAX_DELAY_MS = 1100;
@@ -134,10 +139,12 @@ export function draw(
 
   // Pass 1: terrain + state tint. Unplayable water is never fogged.
   let hasVoid = false;
+  let hasTidy = false;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 3;
       hasVoid ||= data[i] === ST_VOID;
+      hasTidy ||= (data[i] & ST_CLEAN) !== 0;
       ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
       ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
     }
@@ -159,13 +166,13 @@ export function draw(
       ctx.lineTo(w, y);
     }
     ctx.stroke();
-    if (hasVoid) {
-      // Wipe the grid off the water so only the playable island is gridded.
+    if (hasVoid || hasTidy) {
+      // Wipe the grid off water and off tidied-up ground, so only unfinished land is gridded.
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const i = (r * cols + c) * 3;
-          if (data[i] !== ST_VOID) continue;
-          ctx.fillStyle = paletteFor(ST_VOID, view)[paletteIndex(data[i + 1], data[i + 2])];
+          if (data[i] !== ST_VOID && !(data[i] & ST_CLEAN)) continue;
+          ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
           ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
         }
       }
@@ -182,7 +189,7 @@ export function draw(
       for (let c = 0; c < cols; c++) {
         const b = data[(r * cols + c) * 3];
         const state = b & ST_MASK;
-        if (state === 0) continue;
+        if (state === 0 || b & ST_CLEAN) continue;
         const sx = px(x0 + c);
         const sy = py(y0 + r);
         const mx = sx + zoom / 2;
@@ -248,6 +255,29 @@ export function draw(
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // Shimmer over chunks that were just tidied up.
+  if (fx?.cleanups) {
+    for (const f of fx.cleanups) {
+      const p = (fx.now - f.t0) / CLEAN_FX_MS;
+      if (p < 0 || p >= 1) continue;
+      const rx = px(f.x);
+      const ry = py(f.y);
+      const rw = px(f.x + f.size) - rx;
+      const rh = py(f.y + f.size) - ry;
+      if (rx > w || ry > h || rx + rw < 0 || ry + rh < 0) continue;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.35 * (1 - p) ** 2})`;
+      ctx.fillRect(rx, ry, rw, rh);
+      const centre = p * 1.5 - 0.25; // a diagonal band sweeping corner to corner
+      const g = ctx.createLinearGradient(rx, ry, rx + rw, ry + rh);
+      const at = (t: number) => Math.min(1, Math.max(0, t));
+      g.addColorStop(at(centre - 0.25), 'rgba(255,255,255,0)');
+      g.addColorStop(at(centre), `rgba(255,255,255,${0.6 * (1 - p)})`);
+      g.addColorStop(at(centre + 0.25), 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(rx, ry, rw, rh);
+    }
   }
 
   if (view !== 'preview') drawVignette(ctx, w, h);

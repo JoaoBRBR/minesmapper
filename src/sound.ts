@@ -115,6 +115,12 @@ export const sound = {
     const c = ctx();
     if (c) tone(c, 170, 0.14, { type: 'sawtooth', vol: 0.09, to: 120 });
   },
+  /** A chunk was finished and tidied away. */
+  clean() {
+    const c = ctx();
+    if (!c) return;
+    [660, 880, 1100].forEach((f, i) => tone(c, f, 0.28, { type: 'sine', vol: 0.09, at: i * 0.08 }));
+  },
   /** An oracle was found. */
   found() {
     const c = ctx();

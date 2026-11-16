@@ -1,5 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
-import { draw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, type Camera, type Fx, type Ripple } from './render';
+import { draw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
@@ -65,6 +65,7 @@ const END_MS = 1500;
 const BANNER_DELAY_MS = { lost: 1400, won: 1200 };
 let ripple: Ripple | null = null;
 let rippleEnd = 0;
+let cleanFx: NonNullable<Fx['cleanups']> = [];
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
 /** A refused tap (too far from explored ground), flashed on the map. */
 const DENIED_MS = 500;
@@ -98,6 +99,7 @@ export function loadWorld(
   bannerKey = '';
   bannerDismissed = false;
   ripple = null;
+  cleanFx = [];
   endFx = null;
   denied = null;
   oracleMode = false;
@@ -154,6 +156,7 @@ export function setActive(on: boolean) {
     pointers.clear();
     clearTimeout(pressTimer);
     ripple = null;
+    cleanFx = [];
     endFx = null;
     denied = null;
     oracleMode = false;
@@ -290,7 +293,8 @@ function frame(now: number) {
   if (ripple && now > rippleEnd) ripple = null;
   if (endFx && now - endFx.t0 > END_MS) endFx = null;
   if (denied && now - denied.t0 > DENIED_MS) denied = null;
-  if (dirty || ripple || endFx || denied) {
+  if (cleanFx.length && now - cleanFx[0].t0 > CLEAN_FX_MS) cleanFx = cleanFx.filter((f) => now - f.t0 < CLEAN_FX_MS);
+  if (dirty || ripple || endFx || denied || cleanFx.length) {
     dirty = false;
     clampCamera();
     render(now);
@@ -306,6 +310,7 @@ function render(now: number) {
   const fx: Fx = {
     now,
     ripple,
+    cleanups: cleanFx,
     mines: endFx?.kind === 'lost' ? { t0: endFx.t0, origin: endFx.origin } : null,
   };
   if (!endFx) {
@@ -503,6 +508,19 @@ function feedback(
     sound.unflag();
   }
 
+  // Chunks that were just finished get tidied away (numbers, flags and mines vanish).
+  const cleaned = wd.take_clean_log();
+  if (cleaned.length > 0) {
+    sound.clean();
+    haptics.clean();
+    if (animate) {
+      const size = wd.clean_chunk_size();
+      for (let i = 0; i < cleaned.length; i += 2) {
+        cleanFx.push({ x: cleaned[i] * size, y: cleaned[i + 1] * size, size, t0: now });
+      }
+    }
+  }
+
   if (wd.powerups_found() > before.found) {
     const n = wd.powerups_available();
     toast(`✨ You found an oracle! (${n} ready)`);
@@ -631,10 +649,10 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__dev = {
     world: () => world,
     invalidate,
-    goto(x: number, y: number) {
+    goto(x: number, y: number, zoom = 32) {
       cam.cx = x + 0.5;
       cam.cy = y + 0.5;
-      cam.zoom = 32;
+      cam.zoom = zoom;
       invalidate();
     },
     cellToScreen: (x: number, y: number) => [
