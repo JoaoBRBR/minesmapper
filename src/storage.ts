@@ -55,18 +55,23 @@ export const WORLDGEN_VERSION = 1;
 const DB_NAME = 'minefield';
 const WORLDS = 'worlds';
 const STATES = 'states';
+const KV = 'kv';
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 const memWorlds = new Map<string, WorldMeta>();
 const memStates = new Map<string, Int32Array>();
+const memKV = new Map<string, unknown>();
 
 function openDb(): Promise<IDBDatabase | null> {
   dbPromise ??= new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
-        req.result.createObjectStore(WORLDS, { keyPath: 'id' });
-        req.result.createObjectStore(STATES);
+        // Runs for fresh installs (v0 -> v2) and upgrades (v1 -> v2); only add what is missing.
+        const db = req.result;
+        if (!db.objectStoreNames.contains(WORLDS)) db.createObjectStore(WORLDS, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(STATES)) db.createObjectStore(STATES);
+        if (!db.objectStoreNames.contains(KV)) db.createObjectStore(KV);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -134,6 +139,23 @@ export async function deleteWorld(id: string): Promise<void> {
   const tx = db.transaction([WORLDS, STATES], 'readwrite');
   tx.objectStore(WORLDS).delete(id);
   tx.objectStore(STATES).delete(id);
+  await done(tx);
+}
+
+/** Small app-level values (e.g. lifetime stats) that are not tied to a world. */
+export async function getKV<T>(key: string): Promise<T | undefined> {
+  const db = await openDb();
+  return db ? wrap(db.transaction(KV).objectStore(KV).get(key)) : (memKV.get(key) as T | undefined);
+}
+
+export async function setKV(key: string, value: unknown): Promise<void> {
+  const db = await openDb();
+  if (!db) {
+    memKV.set(key, value);
+    return;
+  }
+  const tx = db.transaction(KV, 'readwrite');
+  tx.objectStore(KV).put(value, key);
   await done(tx);
 }
 

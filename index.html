@@ -103,6 +103,7 @@
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-stats">📊 Stats</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>
           <button id="h-install" hidden>⬇ Install app</button>
         </div>
@@ -113,6 +114,25 @@
         <div id="worlds"></div>
       </div>
     </main>
+
+    <!-- Stats -->
+    <section id="stats-screen" class="screen" hidden>
+      <div class="panel">
+        <h1>Stats</h1>
+        <p class="hint" id="stats-since"></p>
+        <div class="tiles" id="stats-tiles"></div>
+        <h2>Island best times</h2>
+        <div id="stats-islands"></div>
+        <h2>Endless records</h2>
+        <div id="stats-endless"></div>
+        <h2>Your worlds</h2>
+        <p id="stats-worlds" class="hint"></p>
+        <div class="row actions">
+          <button id="stats-back" class="primary">← Back</button>
+          <button id="stats-reset" class="danger">Reset stats</button>
+        </div>
+      </div>
+    </section>
 
     <!-- World creator -->
     <section id="creator" class="screen" hidden>

@@ -519,3 +519,55 @@ input:not([type]) {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   font: 600 14px system-ui, sans-serif;
 }
+
+/* ---- Stats ---- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+.tile {
+  padding: 10px 12px;
+  background: #f7f0dc;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+}
+.tile b {
+  display: block;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.tile span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.records {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.records th,
+.records td {
+  padding: 7px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--edge);
+}
+.records th:first-child,
+.records td:first-child {
+  text-align: left;
+  font-weight: 700;
+}
+.records th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.records td.none {
+  opacity: 0.35;
+}
+
+#stats-since {
+  margin: 0 0 10px;
+}

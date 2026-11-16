@@ -3,6 +3,7 @@ import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CL
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
+import { bump, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -45,6 +46,9 @@ const $bannerSub = el('banner-sub');
 
 let cb: GameCallbacks;
 let world: World | null = null;
+let cfg: WorldConfig | null = null;
+/** True when the island win that just happened beat the previous best time. */
+let wonRecord = false;
 let active = false;
 let flagMode = false;
 /** True after pressing the Oracle button: the next tap on a hidden cell spends one. */
@@ -83,13 +87,15 @@ export function initGame(callbacks: GameCallbacks) {
 
 /** Loads a world (optionally restoring saved progress) and shows it. */
 export function loadWorld(
-  cfg: WorldConfig,
+  config: WorldConfig,
   state: Int32Array | null,
   elapsedMs: number,
   saved: CamState | null,
 ) {
   world?.free();
-  world = makeWorld(cfg);
+  cfg = config;
+  wonRecord = false;
+  world = makeWorld(config);
   if (state && !world.import_state(state)) {
     console.warn('Saved progress could not be restored; starting fresh.');
   }
@@ -106,8 +112,8 @@ export function loadWorld(
   oracleMode = false;
   glide = null;
   pointers.clear();
-  $timer.hidden = cfg.mode !== 'island';
-  const defaultZoom = Math.max(minZoom(), cfg.mode === 'island' ? 14 : 32);
+  $timer.hidden = config.mode !== 'island';
+  const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? 14 : 32);
   cam.cx = saved?.cx ?? HOME.x;
   cam.cy = saved?.cy ?? HOME.y;
   cam.zoom = saved?.zoom ?? defaultZoom;
@@ -245,7 +251,7 @@ function updateBanner(now: number) {
     if (key) cb.onChange(); // save the result right away
     if (key === 'won') {
       $bannerTitle.textContent = '🏝 Island cleared!';
-      $bannerSub.textContent = `Time ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}`;
+      $bannerSub.textContent = `Time ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}${wonRecord ? ' · 🏆 New best!' : ''}`;
     } else if (key === 'lost') {
       $bannerTitle.textContent = '💥 Boom!';
       $bannerSub.textContent = `You cleared ${wd.score()} cells`;
@@ -451,6 +457,7 @@ function useOracle(before: Before, x: number, y: number) {
   } else {
     oracleMode = false;
     if (result !== 0) {
+      bump('oraclesUsed');
       sound.oracle();
       haptics.oracle();
       toast(result === 1 ? '✨ Safe! The cell was revealed' : '💣 A mine! It has been flagged');
@@ -473,6 +480,8 @@ function feedback(
   const revealed = wd.score() - before.score;
   const flagDelta = wd.flag_count() - before.flags;
   const animate = animationsOn();
+  bump('cellsCleared', revealed);
+  bump('flagsPlaced', flagDelta);
 
   // Cells that opened: ripple outward from the click (breadth-first depth = delay).
   let rippleMs = 0;
@@ -494,6 +503,7 @@ function feedback(
   }
 
   if (!before.over && wd.is_game_over()) {
+    bump('losses');
     sound.boom();
     haptics.boom();
     if (animate) {
@@ -501,6 +511,8 @@ function feedback(
       shake();
     }
   } else if (!before.won && wd.is_won()) {
+    bump('wins');
+    if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, startedAt === null ? 0 : now - startedAt);
     sound.win();
     haptics.win();
     if (animate) endFx = { kind: 'won', t0: now, origin: [x, y] };
@@ -521,6 +533,7 @@ function feedback(
   // Chunks that were just finished get tidied away (numbers, flags and mines vanish).
   const cleaned = wd.take_clean_log();
   if (cleaned.length > 0) {
+    bump('chunksTidied', cleaned.length / 2);
     sound.clean();
     haptics.clean();
     if (animate) {
@@ -532,11 +545,14 @@ function feedback(
   }
 
   if (wd.powerups_found() > before.found) {
+    bump('oraclesFound', wd.powerups_found() - before.found);
     const n = wd.powerups_available();
     toast(`✨ You found an oracle! (${n} ready)`);
     sound.found();
     haptics.found();
   }
+
+  if (cfg?.mode === 'endless' && revealed > 0) noteEndless(cfg.difficulty, wd.points(), wd.farthest());
 }
 
 // --- Pointer input: drag to pan, tap to reveal, long-press/right-click to flag, pinch to zoom.

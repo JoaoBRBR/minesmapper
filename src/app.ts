@@ -4,6 +4,7 @@ import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { prefersReducedMotion, setSetting, settings } from './settings';
 import { sound } from './sound';
+import { bump, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
 import { DIFFICULTIES, ISLAND_SIZES, makeWorld, randomSeed, seedFromText } from './config';
 import { fmtTime, initGame, loadWorld, setActive, snapshot, thumbnail } from './game';
@@ -21,11 +22,12 @@ import {
   type WorldMeta,
 } from './storage';
 
-type Screen = 'home' | 'creator' | 'game';
+type Screen = 'home' | 'creator' | 'stats' | 'game';
 
 const el = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 const $homeScreen = el('home-screen');
 const $creator = el('creator');
+const $statsScreen = el('stats-screen');
 const $pause = el('pause');
 const $worlds = el('worlds');
 const $continue = el<HTMLButtonElement>('h-continue');
@@ -41,8 +43,11 @@ function show(next: Screen) {
   screen = next;
   $homeScreen.hidden = next !== 'home';
   $creator.hidden = next !== 'creator';
+  $statsScreen.hidden = next !== 'stats';
   $pause.hidden = true;
   setActive(next === 'game');
+  if (next === 'game') startPlay();
+  else stopPlay();
   setBackground(next !== 'game');
   document.body.classList.toggle('in-game', next === 'game');
 }
@@ -103,6 +108,7 @@ async function restartWorld(id: string) {
     updatedAt: Date.now(),
   };
   await saveWorld(fresh, new Int32Array(0));
+  bump('restarts');
   await openWorld(id);
 }
 
@@ -217,6 +223,94 @@ async function goHome() {
   current = null;
   show('home');
   await renderHome();
+}
+
+// --- Stats screen -----------------------------------------------------------------------
+
+function fmtDuration(ms: number) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+const clock = (ms: number) => fmtTime(ms);
+
+function tile(label: string, value: string) {
+  return node('div', { class: 'tile' }, node('b', { textContent: value }), node('span', { textContent: label }));
+}
+
+function table(head: string[], rows: (string | { text: string; none?: boolean })[][]) {
+  const cell = (c: string | { text: string; none?: boolean }, tag: 'th' | 'td') => {
+    const t = typeof c === 'string' ? { text: c } : c;
+    return node(tag, { textContent: t.text, className: 'none' in t && t.none ? 'none' : '' });
+  };
+  return node(
+    'table',
+    { class: 'records' },
+    node('thead', {}, node('tr', {}, ...head.map((h) => cell(h, 'th')))),
+    node('tbody', {}, ...rows.map((r) => node('tr', {}, ...r.map((c) => cell(c, 'td'))))),
+  );
+}
+
+async function renderStats() {
+  const n = (v: number) => v.toLocaleString();
+  const games = stats.wins + stats.losses;
+  $statsScreen.querySelector<HTMLElement>('#stats-since')!.textContent =
+    `Since ${new Date(stats.since).toLocaleDateString()}`;
+  el('stats-tiles').replaceChildren(
+    tile('Time played', fmtDuration(stats.playMs)),
+    tile('Worlds created', n(stats.worldsCreated)),
+    tile('Islands cleared', n(stats.wins)),
+    tile('Mines hit', n(stats.losses)),
+    tile('Win rate', games ? `${Math.round((stats.wins / games) * 100)}%` : '–'),
+    tile('Cells cleared', n(stats.cellsCleared)),
+    tile('Flags placed', n(stats.flagsPlaced)),
+    tile('Areas tidied', n(stats.chunksTidied)),
+    tile('Oracles found', n(stats.oraclesFound)),
+    tile('Oracles used', n(stats.oraclesUsed)),
+    tile('Restarts', n(stats.restarts)),
+  );
+
+  const diffs = ['easy', 'normal', 'hard'] as const;
+  const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+  const time = (key: string) => {
+    const ms = stats.bestIslandMs[key];
+    return ms === undefined ? { text: '–', none: true } : { text: clock(ms) };
+  };
+  el('stats-islands').replaceChildren(
+    table(
+      ['Size', ...diffs.map(cap)],
+      Object.entries(ISLAND_SIZES).map(([name, size]) => [
+        `${cap(name)} (${size})`,
+        ...diffs.map((d) => time(`${size}|${d}`)),
+      ]),
+    ),
+  );
+  el('stats-endless').replaceChildren(
+    table(
+      ['Difficulty', 'Best score', 'Farthest'],
+      diffs.map((d) => {
+        const b = stats.endlessBest[d];
+        return b
+          ? [cap(d), `★ ${n(b.points)}`, `📏 ${n(b.farthest)}`]
+          : [cap(d), { text: '–', none: true }, { text: '–', none: true }];
+      }),
+    ),
+  );
+
+  const worlds = await listWorlds();
+  const count = (s: string) => worlds.filter((w) => w.status === s).length;
+  el('stats-worlds').textContent = worlds.length
+    ? `${worlds.length} saved: ${count('playing')} in progress, ${count('won')} cleared, ${count('lost')} lost.`
+    : 'No saved worlds.';
+}
+
+async function openStats() {
+  await renderStats();
+  show('stats');
 }
 
 // --- Pause menu -------------------------------------------------------------------------
@@ -395,6 +489,7 @@ function bindCreator() {
       updatedAt: now,
     };
     await saveWorld(meta, new Int32Array(0));
+    bump('worldsCreated');
     await openWorld(id);
   });
   window.addEventListener('resize', () => {
@@ -451,6 +546,7 @@ function bindSettings() {
 
 export async function start() {
   await init();
+  await loadStats();
   requestPersistence();
   initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
   bindCreator();
@@ -462,6 +558,13 @@ export async function start() {
   registerServiceWorker(() => ($update.hidden = false));
 
   el('h-new').addEventListener('click', () => void openCreator());
+  el('h-stats').addEventListener('click', () => void openStats());
+  el('stats-back').addEventListener('click', () => void goHome());
+  el('stats-reset').addEventListener('click', async () => {
+    if (!confirm('Reset all lifetime stats and records? Your saved worlds are not affected.')) return;
+    await resetStats();
+    await renderStats();
+  });
   el('p-resume').addEventListener('click', closePause);
   el('p-restart').addEventListener('click', () => void restartCurrent());
   el('p-exit').addEventListener('click', () => void goHome());
@@ -471,9 +574,19 @@ export async function start() {
 
   // Never lose progress when the tab is hidden or closed.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void saveCurrent(true);
+    if (document.visibilityState === 'hidden') {
+      void saveCurrent(true);
+      stopPlay();
+      void flushStats();
+    } else if (screen === 'game') {
+      startPlay();
+    }
   });
-  window.addEventListener('pagehide', () => void saveCurrent(true));
+  window.addEventListener('pagehide', () => {
+    void saveCurrent(true);
+    stopPlay();
+    void flushStats();
+  });
 
   show('home');
   await renderHome();
