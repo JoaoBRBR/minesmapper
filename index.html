@@ -219,38 +219,56 @@
 
     <!-- Main menu -->
     <main id="home-screen" class="screen" hidden>
-      <div class="panel">
+      <div id="home-float" role="toolbar" aria-label="Quick settings">
+        <button id="h-audio" class="float-btn" aria-label="Audio" title="Sound and music"></button>
+        <button id="h-vibration" class="float-btn" aria-label="Vibration" title="Vibration"></button>
+        <button id="h-settings" class="float-btn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
+      <a id="h-github" class="float-btn" href="https://github.com/joaobrbr" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">🐙</a>
+      <div class="panel home-panel">
         <header class="title">
+          <img class="logo" src="/art/app/logo.svg" alt="" width="132" height="132" />
           <h1>Mine's Mapper</h1>
           <p>A cartographer's minefield</p>
         </header>
-        <div class="row actions">
-          <button id="h-continue" class="primary" hidden>▶ Continue</button>
-          <button id="h-adventure" class="primary">🗺 Adventure</button>
-          <button id="h-new" class="primary">🧭 Free expedition</button>
-          <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
-          <button id="h-trophies">🏆 Finished islands</button>
-          <button id="h-stats">📊 Stats</button>
-          <button id="h-settings" aria-label="Settings">⚙ Settings</button>
+        <div class="menu-col">
+          <button id="h-adventure" class="primary big">🗺 Adventure</button>
+          <button id="h-new" class="primary big">🧭 Free expedition</button>
+          <button id="h-daily" class="primary big" title="One island per day, the same for everyone">📅 Daily island</button>
+          <button id="h-trophies" class="big">🏆 Trophy room</button>
+          <button id="h-continue" hidden>▶ Continue</button>
+          <div class="row two">
+            <button id="h-worlds">🗂 My worlds</button>
+            <button id="h-stats">📊 Stats</button>
+          </div>
           <button id="h-install" hidden>⬇ Install app</button>
         </div>
         <p id="ios-hint" class="hint center" hidden>
           To install on iPhone/iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.
         </p>
-        <h2>Your worlds</h2>
-        <div id="worlds"></div>
       </div>
     </main>
 
-    <!-- Adventure: the levels -->
-    <section id="adventure" class="screen" hidden>
+    <!-- My worlds -->
+    <section id="worlds-screen" class="screen has-back" hidden>
+      <button id="worlds-back" class="back-fab">← Back</button>
       <div class="panel">
-        <h1>Adventure</h1>
-        <p class="hint" id="adv-sum"></p>
-        <div id="levels"></div>
-        <div class="row actions">
-          <button id="adv-back" class="primary">← Back</button>
+        <h1>My worlds</h1>
+        <p class="hint">Every island and expedition you have started.</p>
+        <div class="row actions"><button id="w-new" class="primary">🧭 Free expedition</button></div>
+        <div id="worlds"></div>
+      </div>
+    </section>
+
+    <!-- Adventure: the levels -->
+    <section id="adventure" class="screen has-back" hidden>
+      <button id="adv-back" class="back-fab">← Back</button>
+      <div class="panel wide">
+        <div class="adv-head">
+          <h1>Adventure</h1>
+          <div id="adv-stars" class="star-total" title="Stars earned"></div>
         </div>
+        <div id="levels"></div>
       </div>
     </section>
 
@@ -268,14 +286,15 @@
     </div>
 
     <!-- Finished islands -->
-    <section id="trophies" class="screen" hidden>
+    <section id="trophies" class="screen has-back" hidden>
+      <button id="trophies-back" class="back-fab">← Back</button>
       <div class="panel">
-        <h1>Finished islands</h1>
+        <h1>Trophy room</h1>
+        <h2>Conquered islands</h2>
         <p class="hint">Every island you have cleared. Open one to see it in 3D.</p>
         <div id="trophy-list"></div>
-        <div class="row actions">
-          <button id="trophies-back" class="primary">← Back</button>
-        </div>
+        <h2>Achievements</h2>
+        <p class="empty">Coming soon</p>
       </div>
     </section>
 
@@ -297,7 +316,8 @@
     </div>
 
     <!-- Stats -->
-    <section id="stats-screen" class="screen" hidden>
+    <section id="stats-screen" class="screen has-back" hidden>
+      <button id="stats-back" class="back-fab">← Back</button>
       <div class="panel">
         <h1>Stats</h1>
         <p class="hint" id="stats-since"></p>
@@ -309,8 +329,7 @@
         <h2>Your worlds</h2>
         <p id="stats-worlds" class="hint"></p>
         <div class="row actions">
-          <button id="stats-back" class="primary">← Back</button>
-          <button id="stats-reset" class="danger">Reset stats</button>
+          <button id="stats-reset" class="danger small">Reset stats</button>
         </div>
       </div>
     </section>

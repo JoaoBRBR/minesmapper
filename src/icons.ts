@@ -57,7 +57,7 @@ const TOKENS: Record<string, [string, number?]> = {
   '📊': ['progress'], '⌖': ['center'], '☰': ['menu'], '🌍': ['globe-3d'], '👁': ['eye'],
   '💥': ['boom'], '🔒': ['lock'], '🏆': ['trophy'], '📅': ['calendar'], '🗺': ['adventure-map'],
   '⚙': ['settings'], '⬇': ['install'], '🎲': ['dice'], '🗑': ['trash'], '🔥': ['flame'],
-  '♪': ['music'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
+  '♪': ['music'], '🗂': ['worlds'], '🔊': ['volume'], '🔇': ['volume-off'], '📳': ['vibrate'], '📴': ['vibrate-off'], '🐙': ['github'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
   '♥': ['heart-full'], '♡': ['heart-empty'], '★': ['star-full'], '☆': ['star-empty'],
   '→': ['arrow-right'], '←': ['arrow-back'], '↓': ['arrow-right', 1], '↑': ['arrow-right', 3],
 };

@@ -44,10 +44,11 @@ import {
   type WorldMeta,
 } from './storage';
 
-type Screen = 'home' | 'creator' | 'adventure' | 'stats' | 'trophies' | 'game';
+type Screen = 'home' | 'worlds' | 'creator' | 'adventure' | 'stats' | 'trophies' | 'game';
 
 const el = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 const $homeScreen = el('home-screen');
+const $worldsScreen = el('worlds-screen');
 const $creator = el('creator');
 const $adventure = el('adventure');
 const $statsScreen = el('stats-screen');
@@ -66,6 +67,7 @@ let saveChain: Promise<void> = Promise.resolve();
 function show(next: Screen) {
   screen = next;
   $homeScreen.hidden = next !== 'home';
+  $worldsScreen.hidden = next !== 'worlds';
   $creator.hidden = next !== 'creator';
   $adventure.hidden = next !== 'adventure';
   $statsScreen.hidden = next !== 'stats';
@@ -262,15 +264,15 @@ async function renderHome() {
   );
   const today = worlds.find((m) => m.id === `daily-${todayKey()}`);
   const daily = el('h-daily');
-  daily.textContent = !today
-    ? '📅 Daily island'
+  daily.textContent = !today || (today.status === 'playing' && today.cleared === 0)
+    ? '📅 Start daily island'
     : today.status === 'won'
       ? `📅 Daily island · cleared ${fmtTime(today.elapsedMs)}`
       : today.status === 'lost'
         ? '📅 Daily island · lost'
-        : `📅 Daily island · ${today.total ? Math.floor((today.cleared / today.total) * 100) : 0}%`;
+        : `📅 Continue daily island · ${today.total ? Math.floor((today.cleared / today.total) * 100) : 0}%`;
   const cleared = (await listTrophies()).length;
-  el('h-trophies').textContent = cleared ? `🏆 Finished islands (${cleared})` : '🏆 Finished islands';
+  el('h-trophies').textContent = cleared ? `🏆 Trophy room (${cleared})` : '🏆 Trophy room';
   const last = all.find((m) => m.status === 'playing');
   $continue.hidden = !last;
   if (last) {
@@ -544,32 +546,59 @@ async function openAdventure() {
   await renderAdventure();
 }
 
+/** A small picture of a level's map (no mines shown), filled in shortly after the cards appear. */
+function paintLevelThumb(canvas: HTMLCanvasElement, l: LevelDef) {
+  const css = 132;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = canvas.height = Math.round(css * dpr);
+  const pctx = canvas.getContext('2d')!;
+  pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const world = makeWorld(levelConfig(l));
+  const zoom = l.mode === 'island' ? css / ((l.size ?? 64) * 1.05) : 2.6;
+  draw(pctx, world, { cx: 0.5, cy: 0.5, zoom }, css, css, 'preview');
+  world.free();
+}
+
 async function renderAdventure() {
   const [progress, metas] = await Promise.all([loadProgress(), listWorlds()]);
   const total = LEVELS.length * 3;
   const got = LEVELS.reduce((n, l) => n + (progress[l.id]?.stars ?? 0), 0);
-  el('adv-sum').textContent = `${got} of ${total} stars`;
+  el('adv-stars').textContent = `★ ${got} / ${total}`;
+  const thumbs: [HTMLCanvasElement, LevelDef][] = [];
   el('levels').replaceChildren(
     ...LEVELS.map((l, i) => {
       const open = isUnlocked(progress, i);
       const res = progress[l.id];
       const meta = metas.find((m) => m.id === levelWorldId(l));
-      const note = !open
-        ? '🔒 Finish the previous level'
+      const status = !open
+        ? 'Locked'
         : res
-          ? `${stars(res.stars)} · best ${fmtTime(res.bestMs)}`
+          ? `Best ${fmtTime(res.bestMs)}`
           : meta?.status === 'playing' && meta.cleared > 0
             ? 'In progress'
-            : l.blurb;
-      const card = node(
+            : 'New';
+      const canvas = node('canvas', { class: 'lv-thumb' });
+      thumbs.push([canvas, l]);
+      return node(
         'button',
         { class: `level${open ? '' : ' locked'}`, disabled: !open, onclick: () => openBrief(l) },
-        node('span', { class: 'lv-num', textContent: String(i + 1) }),
-        node('span', { class: 'lv-text' }, node('b', { textContent: l.title }), node('small', { textContent: note })),
+        node('span', { class: 'lv-pic' }, canvas, node('span', { class: 'lv-num', textContent: String(i + 1) }), ...(open ? [] : [node('span', { class: 'lv-lock', textContent: '🔒' })])),
+        node('b', { class: 'lv-title', textContent: l.title }),
+        node('span', { class: 'lv-mode', textContent: l.mode === 'island' ? '🏝 Island' : '♾ Endless' }),
+        node('span', { class: 'lv-stars', textContent: stars(open ? (res?.stars ?? 0) : 0) }),
+        node('small', { class: 'lv-status', textContent: status }),
       );
-      return card;
     }),
   );
+  // paint one at a time so the screen appears at once
+  let k = 0;
+  const next = () => {
+    const t = thumbs[k++];
+    if (!t || screen !== 'adventure') return;
+    paintLevelThumb(t[0], t[1]);
+    setTimeout(next, 0);
+  };
+  setTimeout(next, 0);
 }
 
 function goalLine(l: LevelDef) {
@@ -956,6 +985,38 @@ function bindSettings() {
   });
 }
 
+/** The audio and vibration buttons floating on the main menu. */
+function bindQuickToggles() {
+  const audio = el('h-audio');
+  const vib = el('h-vibration');
+  const sync = () => {
+    const on = settings.sound || settings.music;
+    const a = on ? '🔊' : '🔇';
+    if (audio.dataset.t !== a) {
+      audio.dataset.t = a;
+      audio.textContent = a;
+    }
+    const v = settings.vibration && vibrationSupported ? '📳' : '📴';
+    if (vib.dataset.t !== v) {
+      vib.dataset.t = v;
+      vib.textContent = v;
+    }
+  };
+  sync();
+  onSettingsChange(sync);
+  audio.addEventListener('click', () => {
+    const next = !(settings.sound || settings.music);
+    setSetting('sound', next);
+    setSetting('music', next);
+    if (next) sound.test();
+  });
+  if (!vibrationSupported) vib.hidden = true;
+  vib.addEventListener('click', () => {
+    setSetting('vibration', !settings.vibration);
+    if (settings.vibration) haptics.test();
+  });
+}
+
 // --- Boot -------------------------------------------------------------------------------
 
 /** Islands cleared before trophies had their own storage get one now. */
@@ -1005,6 +1066,10 @@ export async function start() {
   registerServiceWorker(() => ($update.hidden = false));
 
   el('h-new').addEventListener('click', () => void openCreator());
+  el('w-new').addEventListener('click', () => void openCreator());
+  el('h-worlds').addEventListener('click', () => show('worlds'));
+  el('worlds-back').addEventListener('click', () => void goHome());
+  bindQuickToggles();
   el('h-daily').addEventListener('click', () => void openDaily());
   el('h-adventure').addEventListener('click', () => void openAdventure());
   el('adv-back').addEventListener('click', () => void goHome());

@@ -65,6 +65,13 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/arrow-right.svg` | 48×48 | Direction arrows (→); the game rotates this one for ← ↑ ↓. |
 | `ui/arrow-back.svg` | 48×48 | Back buttons (←). |
 | `ui/play-next.svg` | 48×48 | Next level / Continue (▶). |
+| `app/logo.svg` | 256×256 | The emblem on the main menu (a compass rose that is also a mine). The game name is written next to it as text. |
+| `ui/worlds.svg` | 48×48 | My worlds button (🗂). |
+| `ui/volume.svg` | 48×48 | Audio is on (🔊), floating button on the main menu. |
+| `ui/volume-off.svg` | 48×48 | Audio is off (🔇). |
+| `ui/vibrate.svg` | 48×48 | Vibration is on (📳). |
+| `ui/vibrate-off.svg` | 48×48 | Vibration is off (📴). |
+| `ui/github.svg` | 48×48 | Link to the author page (🐙), floating on the main menu. |
 | `app/icon.svg` | 512×512 | Main app image: home-screen / install icon (rounded square; corners stay transparent). |
 | `app/icon-maskable.svg` | 512×512 | Same picture, full bleed, no rounded corners. Keep everything important inside the central 80% circle: phones crop it. |
 | `app/favicon.svg` | 512×512 | Browser tab icon. Shown at 16-32 px, so keep the picture bold and simple. |
