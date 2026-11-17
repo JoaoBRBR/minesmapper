@@ -281,8 +281,8 @@ function updateBanner(now: number) {
   const hide = key === '' || bannerDismissed || !ready;
   if ($banner.hidden && !hide) bannerShownAt = now;
   $banner.hidden = hide;
-  // 3D view: after winning an island (and, while testing, after a loss too).
-  $b3d.hidden = !(wd.is_island() && (key === 'won' || (key === 'lost' && settings.always3d)));
+  // 3D view: a reward for clearing an island.
+  $b3d.hidden = !(wd.is_island() && key === 'won');
 }
 
 function updateHud(now: number) {

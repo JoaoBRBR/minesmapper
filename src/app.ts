@@ -169,9 +169,9 @@ function describe(m: WorldMeta) {
   return { line1: `${mode} · ${c.difficulty}`, line2: `${progress}${time}` };
 }
 
-/** Islands can be viewed in 3D once cleared (or any time while the testing switch is on). */
+/** Only islands you have cleared can be viewed in 3D. */
 function canView3D(m: WorldMeta) {
-  return m.config.mode === 'island' && (m.status === 'won' || settings.always3d);
+  return m.config.mode === 'island' && m.status === 'won';
 }
 
 function worldCard(m: WorldMeta) {
@@ -448,7 +448,7 @@ function syncMenu() {
   oracle.hidden = oracles === 0;
   oracle.textContent = `✨ Use an oracle (×${oracles})`;
   const island = current?.config.mode === 'island';
-  el('m-3d').hidden = !(island && (snapshot().status === 'won' || settings.always3d));
+  el('m-3d').hidden = !(island && snapshot().status === 'won');
 }
 
 function openPause() {
