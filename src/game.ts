@@ -533,7 +533,8 @@ function feedback(
   // Music: the biome under the action colours the notes (desert, ice, ...).
   const here = wd.view(x, y, 1, 1);
   const flavor = flavorOf(here[0], here[1]);
-  if (flagDelta > 0) musicFlag(flavor);
+  // With music running, a flag is voiced by its note alone (the plain blip is only a fallback).
+  const flagNote = flagDelta > 0 && musicFlag(flavor);
   if (revealed >= 5) musicArea(revealed, flavor);
 
   // Cells that opened: ripple outward from the click (breadth-first depth = delay).
@@ -578,7 +579,7 @@ function feedback(
   }
 
   if (flagDelta > 0) {
-    sound.flag();
+    if (!flagNote) sound.flag();
     haptics.flag();
   } else if (flagDelta < 0) {
     sound.unflag();

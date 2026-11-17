@@ -282,8 +282,9 @@ function push(kind: string, at: number, dur: number, value: Record<string, unkno
 
 // Public: player actions --------------------------------------------------------------------------
 
-export function flag(flavor: Flavor) {
-  if (!repl?.scheduler.started) return;
+/** Queues the next motif note for a flag. Returns true if a note was scheduled. */
+export function flag(flavor: Flavor): boolean {
+  if (!repl?.scheduler.started) return false;
   const st = style();
   const degree = st.motif[flagStep++ % st.motif.length];
   const pitch = degreeToMidi(st.root, flavorScale(flavor), degree) + flavorOctave(flavor);
@@ -297,6 +298,7 @@ export function flag(flavor: Flavor) {
   } else if (flavor === 'ice') {
     push('flag', at + TICKS / 32, EIGHTH, { ...voice(flavor, 'note'), note: pitch + 7, gain: 0.09 }, flavor);
   }
+  return true;
 }
 let lastFlagTick = 0;
 let lastAreaTick = -1e9;

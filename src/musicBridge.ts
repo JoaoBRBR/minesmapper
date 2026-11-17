@@ -75,7 +75,8 @@ export function initMusic() {
 
 const live = () => (engine?.isRunning() ? engine : null);
 
-export const musicFlag = (flavor: Flavor) => live()?.flag(flavor);
+/** True if the music played a note for the flag (so the plain blip is not needed). */
+export const musicFlag = (flavor: Flavor): boolean => live()?.flag(flavor) ?? false;
 export const musicArea = (cells: number, flavor: Flavor) => live()?.area(cells, flavor);
 export const musicChunk = (flavor: Flavor) => live()?.chunk(flavor);
 export const musicWin = () => live()?.win();
