@@ -553,6 +553,7 @@ function drawLevelMarks(l: LevelDef) {
       glowRect(x0, y0, sw, sh, true);
       label('Start here', x0 + sw / 2, y0 - 10);
     }
+    drawTreasureTrail(start, g.target);
     drawTreasureX(g.target[0], g.target[1]);
   }
   ctx.restore();
@@ -582,6 +583,47 @@ function label(text: string, x: number, y: number) {
   ctx.strokeText(text, x, y);
   ctx.fillStyle = '#f4d35e';
   ctx.fillText(text, x, y);
+}
+
+/**
+ * Zoomed out, a dashed trail runs from the start to the X, like the route on an old treasure map.
+ * It fades away as you zoom in on the ground.
+ */
+function drawTreasureTrail(start: [number, number, number, number] | null, target: [number, number]) {
+  const alpha = clamp01((24 - cam.zoom) / 12);
+  if (alpha <= 0) return;
+  const [fx, fy] = start ? [(start[0] + start[2] + 1) / 2, (start[1] + start[3] + 1) / 2] : [0.5, 0.5];
+  const [ax, ay] = toScreen(fx, fy);
+  const [bx, by] = toScreen(target[0] + 0.5, target[1] + 0.5);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 40) return;
+  // a gentle bend, so it looks hand-drawn rather than ruled
+  const cx = (ax + bx) / 2 - (dy / len) * len * 0.12;
+  const cy = (ay + by) / 2 + (dx / len) * len * 0.12;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.quadraticCurveTo(cx, cy, bx, by);
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(244, 236, 216, 0.75)';
+  ctx.lineWidth = 7;
+  ctx.stroke();
+  ctx.setLineDash([2, 12]);
+  ctx.strokeStyle = '#7a2417';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  // a small ring where the journey starts
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(ax, ay, 7, 0, Math.PI * 2);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#7a2417';
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** A red X on the treasure cell; off screen, an arrow on the edge points the way. */
