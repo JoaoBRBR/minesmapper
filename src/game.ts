@@ -181,8 +181,28 @@ export function loadWorld(
   cam.cx = saved?.cx ?? opening?.x ?? HOME.x;
   cam.cy = saved?.cy ?? opening?.y ?? HOME.y;
   cam.zoom = saved?.zoom ?? opening?.zoom ?? defaultZoom;
+  clearTimeout(introTimer);
+  if (level && opening && !saved && !(state && world.score() > 0) && level.goal.type === 'reach' && animationsOn()) {
+    playIntro(level, opening);
+  }
   clampCamera();
   invalidate();
+}
+
+let introTimer = 0;
+
+/** Treasure levels open on a wide view that shows the X, then glide in to the starting spot. */
+function playIntro(l: LevelDef, to: { x: number; y: number; zoom: number }) {
+  if (l.goal.type !== 'reach') return;
+  const [tx, ty] = l.goal.target;
+  const span = Math.max(Math.abs(ty + 0.5 - to.y), Math.abs(tx + 0.5 - to.x)) * 2 + 12;
+  cam.cx = (tx + 0.5 + to.x) / 2;
+  cam.cy = (ty + 0.5 + to.y) / 2;
+  cam.zoom = Math.max(minZoom(), Math.min(to.zoom, Math.min(w, h) / span));
+  const target = world!;
+  introTimer = window.setTimeout(() => {
+    if (world === target && !glide && target.score() === 0) glideTo(to.x, to.y, to.zoom, 1500);
+  }, 1600);
 }
 
 export function snapshot(): Snapshot {

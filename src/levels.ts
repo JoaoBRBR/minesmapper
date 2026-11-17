@@ -113,7 +113,7 @@ export const LEVELS: LevelDef[] = [
     title: 'X marks the spot',
     blurb: 'Dig your way north to the treasure.',
     intro: [
-      'A treasure lies three areas to the north, marked with an X. Begin inside the dashed square.',
+      'A treasure lies four areas to the north, marked with an X. Begin inside the dashed square.',
       'Open a path to the X. You can only reveal squares next to ground you already know, so clear a trail. Reveal the X to win.',
     ],
     mode: 'endless',
@@ -121,9 +121,8 @@ export const LEVELS: LevelDef[] = [
     density: 0.15,
     maxDensity: 0.21,
     hearts: 3,
-    goal: { type: 'reach', target: [40, -40] },
+    goal: { type: 'reach', target: [40, -56] },
     startArea: [32, 0, 47, 15],
-    camera: { x: 40, y: -18, zoom: 14 },
   },
 ];
 
