@@ -25,10 +25,12 @@ export interface Settings {
   waves: boolean;
   /** Desktop: move the map with the arrow keys or WASD. */
   keyboardMove: boolean;
+  /** Phones: show the floating Reveal/Flag switch. */
+  modeSwitch: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true, keyboardMove: true };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true, keyboardMove: true, modeSwitch: true };
 
 function load(): Settings {
   try {
@@ -55,6 +57,7 @@ function load(): Settings {
           : DEFAULTS.musicVolume,
       waves: typeof raw.waves === 'boolean' ? raw.waves : DEFAULTS.waves,
       keyboardMove: typeof raw.keyboardMove === 'boolean' ? raw.keyboardMove : DEFAULTS.keyboardMove,
+      modeSwitch: typeof raw.modeSwitch === 'boolean' ? raw.modeSwitch : DEFAULTS.modeSwitch,
     };
   } catch {
     return { ...DEFAULTS };

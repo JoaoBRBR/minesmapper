@@ -59,7 +59,6 @@ const $progressBar = el('progress-bar');
 const $progressText = el('progress-text');
 const $progressBtn = el<HTMLButtonElement>('progress');
 const $fab = el<HTMLButtonElement>('fab');
-const $fabIcon = el('fab-ico');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
 const $bNext = el<HTMLButtonElement>('b-next');
@@ -250,6 +249,7 @@ export function setActive(on: boolean) {
   active = on;
   canvas.hidden = !on;
   $hud.hidden = !on;
+  if (!on) $fab.hidden = true;
   if (!on) {
     $banner.hidden = true;
     bannerKey = '';
@@ -463,8 +463,7 @@ function updateHud(now: number) {
   canvas.classList.toggle('targeting', oracleMode || iceMode);
   if (progressView) setText($progressText, progressSummary(wd));
   // the floating Reveal/Flag button (phones)
-  $fab.hidden = progressView;
-  setText($fabIcon, flagMode ? '🚩' : '⛏');
+  $fab.hidden = progressView || !settings.modeSwitch;
   $fab.setAttribute('aria-pressed', String(flagMode));
   if (now - lastMoodCheck > 1500) {
     // The music follows the biome in the middle of the screen.

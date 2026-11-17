@@ -966,32 +966,75 @@ input:not([type]) {
   flex: none;
 }
 
-/* ---- Floating Reveal/Flag button (phones) ---- */
+/* ---- Floating Reveal/Flag toggle switch (phones) ---- */
 #fab {
   display: none;
   position: fixed;
   right: max(14px, env(safe-area-inset-right));
   bottom: max(20px, env(safe-area-inset-bottom));
   z-index: 13;
-  width: 60px;
-  height: 60px;
+  width: 98px;
+  height: 52px;
   padding: 0;
-  place-items: center;
-  border-radius: 50%;
-  border-width: 2px;
-  font-size: 26px;
-  line-height: 1;
-  box-shadow:
-    0 4px 14px var(--shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  border: 3px solid #1f5a33;
+  background: linear-gradient(#4fae6e, #2f8a4f);
+  box-shadow: 0 4px 14px var(--shadow), inset 0 2px 4px rgba(0, 0, 0, 0.25);
+  transition: background 0.2s, border-color 0.2s;
 }
 #fab[aria-pressed='true'] {
-  background: linear-gradient(#e9695c, #c0392b);
+  background: linear-gradient(#ee6a5c, #c53a2b);
   border-color: #7f241b;
+}
+#fab .sw-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(#fffdf4, #eadfbf);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+#fab[aria-pressed='true'] .sw-knob {
+  transform: translateX(46px);
+}
+#fab .sw-ico {
+  position: absolute;
+  top: 3px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  transition: opacity 0.2s;
+}
+#fab .sw-l { left: 3px; }
+#fab .sw-r { right: 3px; }
+#fab .sw-ico .ic {
+  width: 26px;
+  height: 26px;
+  vertical-align: 0;
+}
+/* the side that is not active sits on the coloured track, so it is drawn light and faded */
+#fab .sw-ico .ic { filter: none; }
+#fab[aria-pressed='false'] .sw-r .ic,
+#fab[aria-pressed='true'] .sw-l .ic {
+  filter: invert(1);
+  opacity: 0.7;
 }
 @media (max-width: 720px), (pointer: coarse) {
   #fab:not([hidden]) {
-    display: grid;
+    display: block;
+  }
+}
+/* settings that only make sense on a phone */
+.touch-only {
+  display: none !important;
+}
+@media (max-width: 720px), (pointer: coarse) {
+  .touch-only {
+    display: grid !important;
   }
 }
 
@@ -1235,4 +1278,37 @@ button.small {
 }
 .lv-status {
   color: var(--ink-soft);
+}
+
+/* Adventure on phones: always two columns, smaller header */
+@media (max-width: 560px) {
+  .panel.wide {
+    padding: 14px 10px;
+  }
+  .adv-head h1 {
+    font-size: 24px;
+  }
+  .star-total {
+    font: 700 20px var(--serif);
+    padding: 3px 12px;
+  }
+  .star-total .ic {
+    width: 28px;
+    height: 28px;
+  }
+  #levels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .level {
+    padding: 7px;
+  }
+  .lv-stars .ic {
+    width: 26px;
+    height: 26px;
+  }
+  .lv-lock .ic {
+    width: 44px;
+    height: 44px;
+  }
 }

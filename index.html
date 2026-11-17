@@ -40,7 +40,7 @@
 
     <!-- Floating Reveal/Flag switch for phones -->
     <button id="fab" hidden aria-pressed="false" aria-label="Switch between revealing and flagging" title="Reveal / Flag">
-      <span id="fab-ico">⛏</span>
+      <span class="sw-knob"></span><span class="sw-ico sw-l">⛏</span><span class="sw-ico sw-r">🚩</span>
     </button>
 
     <div id="toast" role="status" hidden></div>
@@ -160,6 +160,11 @@
           <b>Shore waves</b>
           <input type="checkbox" id="s-waves" data-setting="waves" />
           <small>Gentle waves along island shores.</small>
+        </label>
+        <label class="switch touch-only">
+          <b>Reveal / flag switch</b>
+          <input type="checkbox" id="s-modeSwitch" data-setting="modeSwitch" />
+          <small>Phones: the floating switch that changes between revealing and flagging. Turn it off if you prefer pressing and holding to flag.</small>
         </label>
         <label class="switch">
           <b>Keyboard movement</b>
