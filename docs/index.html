@@ -7,29 +7,36 @@
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Minefield" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mine's Mapper" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#26547f" />
-    <title>Minefield — infinite minesweeper</title>
-    <script type="module" crossorigin src="./assets/index-BF2Yk2EZ.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CHIXWVB3.css">
+    <meta name="theme-color" content="#e3d2a4" />
+    <title>Mine's Mapper — a cartographer's minefield</title>
+    <script type="module" crossorigin src="./assets/index-CRxqdlK0.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/render-DPbiQjPh.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-D3xRqHmp.css">
   </head>
   <body>
     <canvas id="bg" hidden aria-hidden="true"></canvas>
     <canvas id="map" hidden></canvas>
 
+    <!-- The aged edge of the paper, over the map but under the dialogs. -->
+    <div id="vintage" aria-hidden="true"></div>
+
     <div id="hud" hidden>
       <span class="chip" id="score">0 cleared</span>
       <span class="chip" id="timer" hidden>00:00</span>
-      <button id="mode" aria-pressed="false">⛏ Reveal</button>
-      <button id="oracle" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
-      <button id="home" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
-      <button id="menu" title="Menu (Esc)">☰ Menu</button>
-      <span class="chip" id="pos">0, 0</span>
+      <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
+      <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
+      <button id="iceclear" class="hud-extra" aria-pressed="false" hidden title="Make a whole stretch of water see-through (I)">❄ Ice clearer</button>
+      <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
+      <span class="chip hud-extra" id="pos">0, 0</span>
+      <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
+        <span class="ico">☰</span><span class="lbl"> Menu</span><span id="menu-badge" class="dot" hidden>✨</span>
+      </button>
     </div>
 
     <div id="toast" role="status" hidden></div>
@@ -39,6 +46,7 @@
       <div id="banner-title" class="dialog-title"></div>
       <small id="banner-sub"></small>
       <div class="row">
+        <button id="b-3d" class="primary" hidden>🌍 See it in 3D</button>
         <button id="b-restart" class="primary">↻ Restart</button>
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
@@ -52,16 +60,72 @@
       <button id="update-dismiss" aria-label="Dismiss">✕</button>
     </div>
 
-    <!-- Pause menu -->
-    <div id="pause" class="overlay" hidden>
-      <div class="dialog">
-        <div class="dialog-title">Paused</div>
-        <small id="pause-name"></small>
-        <div class="stack">
-          <button id="p-resume" class="primary">▶ Resume</button>
-          <button id="p-restart">↻ Restart this world</button>
-          <button id="p-settings">⚙ Settings</button>
-          <button id="p-exit">⌂ Save &amp; exit to menu</button>
+    <!-- Game menu: a dropdown from the top right -->
+    <div id="pause" class="overlay menu-overlay" hidden>
+      <div class="dialog menu-panel" role="menu" aria-label="Game menu">
+        <div class="menu-head">
+          <b id="pause-name"></b>
+          <button id="p-resume" aria-label="Close menu">✕</button>
+        </div>
+        <div class="menu-info" id="menu-pos"></div>
+        <div class="seg" id="m-mode">
+          <button type="button" data-v="reveal">⛏ Reveal</button>
+          <button type="button" data-v="flag">🚩 Flag</button>
+        </div>
+        <button id="m-center">⌖ Center on the start</button>
+        <button id="m-oracle" hidden>✨ Oracle</button>
+        <button id="m-ice" hidden>❄ Ice clearer</button>
+        <button id="m-3d" hidden>🌍 View the island in 3D</button>
+        <div class="menu-toggles">
+        <label class="switch">
+          <b>Reveal animations</b>
+          <input type="checkbox" id="m-animations" data-setting="animations" />
+        </label>
+        <label class="switch">
+          <b>Sound effects</b>
+          <input type="checkbox" id="m-sound" data-setting="sound" />
+        </label>
+        <label class="switch">
+          <b>Vibration</b>
+          <input type="checkbox" id="m-vibration" data-setting="vibration" />
+        </label>
+        <label class="switch">
+          <b>Music</b>
+          <input type="checkbox" id="m-music" data-setting="music" />
+        </label>
+        <div class="switch choice-row">
+          <b>Music style</b>
+          <div class="seg" data-setting-choice="musicStyle" id="m-musicStyle">
+            <button type="button" data-v="dawn">Dawn</button>
+            <button type="button" data-v="rain">Rain</button>
+            <button type="button" data-v="jazz">Jazz</button>
+          </div>
+        </div>
+        <div class="range-row">
+          <b>Music volume</b>
+          <input type="range" min="0" max="100" step="1" id="m-musicVolume" data-setting-range="musicVolume" aria-label="Music volume" />
+        </div>
+        <label class="switch">
+          <b>Dark paper</b>
+          <input type="checkbox" id="m-darkPaper" data-setting="darkPaper" />
+        </label>
+        <div class="switch choice-row">
+          <b>Numbers</b>
+          <div class="seg" data-setting-choice="numberStyle" id="s-numberStyle">
+            <button type="button" data-v="engraved">Engraved</button>
+            <button type="button" data-v="handwritten">Written</button>
+            <button type="button" data-v="colored">Colored</button>
+          </div>
+          <small>Engraved like a printed map, hand-written, or the classic colours.</small>
+        </div>
+        <label class="switch">
+          <b>Show chunk borders</b>
+          <input type="checkbox" id="m-chunkBorders" data-setting="chunkBorders" />
+        </label>
+        </div>
+        <div class="row">
+          <button id="p-restart">↻ Restart</button>
+          <button id="p-exit" class="primary">⌂ Save &amp; exit</button>
         </div>
       </div>
     </div>
@@ -72,23 +136,54 @@
         <div class="dialog-title" id="settings-title">Settings</div>
         <label class="switch">
           <b>Reveal animations</b>
-          <input type="checkbox" id="s-animations" />
+          <input type="checkbox" id="s-animations" data-setting="animations" />
           <small id="s-animations-hint">Cells ripple open; mines pop when you lose.</small>
         </label>
         <label class="switch">
           <b>Sound effects</b>
-          <input type="checkbox" id="s-sound" />
+          <input type="checkbox" id="s-sound" data-setting="sound" />
           <small>Clicks, flags, explosions and a victory chime.</small>
         </label>
         <label class="switch" id="s-vibration-row">
           <b>Vibration</b>
-          <input type="checkbox" id="s-vibration" />
+          <input type="checkbox" id="s-vibration" data-setting="vibration" />
           <small id="s-vibration-hint">Short buzzes for flags, mines and wins.</small>
         </label>
+        <label class="switch">
+          <b>Music</b>
+          <input type="checkbox" id="s-music" data-setting="music" />
+          <small>A calm, generative soundtrack that answers your actions.</small>
+        </label>
+        <div class="switch choice-row">
+          <b>Music style</b>
+          <div class="seg" data-setting-choice="musicStyle" id="s-musicStyle">
+            <button type="button" data-v="dawn">Dawn</button>
+            <button type="button" data-v="rain">Rain</button>
+            <button type="button" data-v="jazz">Jazz</button>
+          </div>
+          <small>Dawn: sunny lo-fi · Rain: late-night lo-fi · Jazz: smoky lo-fi jazz</small>
+        </div>
+        <div class="range-row">
+          <b>Music volume</b>
+          <input type="range" min="0" max="100" step="1" id="s-musicVolume" data-setting-range="musicVolume" aria-label="Music volume" />
+        </div>
+        <label class="switch">
+          <b>Dark paper</b>
+          <input type="checkbox" id="s-darkPaper" data-setting="darkPaper" />
+          <small>A darker parchment, easier on the eyes at night.</small>
+        </label>
+        <div class="switch choice-row">
+          <b>Numbers</b>
+          <div class="seg" data-setting-choice="numberStyle" id="m-numberStyle">
+            <button type="button" data-v="engraved">Engraved</button>
+            <button type="button" data-v="handwritten">Written</button>
+            <button type="button" data-v="colored">Colored</button>
+          </div>
+        </div>
         <div class="adv-title">Advanced</div>
         <label class="switch">
           <b>Show chunk borders</b>
-          <input type="checkbox" id="s-chunks" />
+          <input type="checkbox" id="s-chunks" data-setting="chunkBorders" />
           <small>Outlines the 16×16 cleanup chunks and marks finished ones. Handy for testing.</small>
         </label>
         <div class="stack"><button id="s-close" class="primary">Done</button></div>
@@ -99,12 +194,13 @@
     <main id="home-screen" class="screen" hidden>
       <div class="panel">
         <header class="title">
-          <h1>Minefield</h1>
-          <p>Infinite &amp; island minesweeper</p>
+          <h1>Mine's Mapper</h1>
+          <p>A cartographer's minefield</p>
         </header>
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-trophies">🏆 Finished islands</button>
           <button id="h-stats">📊 Stats</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>
           <button id="h-install" hidden>⬇ Install app</button>
@@ -116,6 +212,35 @@
         <div id="worlds"></div>
       </div>
     </main>
+
+    <!-- Finished islands -->
+    <section id="trophies" class="screen" hidden>
+      <div class="panel">
+        <h1>Finished islands</h1>
+        <p class="hint">Every island you have cleared. Open one to see it in 3D.</p>
+        <div id="trophy-list"></div>
+        <div class="row actions">
+          <button id="trophies-back" class="primary">← Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3D island viewer -->
+    <div id="viewer" hidden>
+      <div id="viewer-stage"></div>
+      <div class="viewer-bar">
+        <div class="viewer-title">
+          <b id="viewer-title"></b>
+          <small id="viewer-sub"></small>
+        </div>
+        <div class="row">
+          <button id="viewer-rotate" aria-pressed="true">⟳ Rotate</button>
+          <button id="viewer-close" class="primary">✕ Close</button>
+        </div>
+      </div>
+      <div class="viewer-hint">Drag to turn · scroll or pinch to zoom</div>
+      <div id="viewer-msg" role="status" hidden></div>
+    </div>
 
     <!-- Stats -->
     <section id="stats-screen" class="screen" hidden>

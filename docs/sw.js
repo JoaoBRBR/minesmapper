@@ -1,8 +1,8 @@
-// Minefield service worker. The version and the precache list below are filled in at build
+// Mine's Mapper service worker. The version and the precache list below are filled in at build
 // time (see vite.config.ts), so every deploy gets a fresh cache and old ones are dropped.
-const VERSION = '50406751ac';
+const VERSION = '2ffe88a8a4';
 const CACHE = `minefield-${VERSION}`;
-const PRECACHE = ["./","assets/index-BF2Yk2EZ.js","assets/index-CHIXWVB3.css","assets/minefield_bg-BUsUE2p0.wasm","manifest.webmanifest","favicon.svg","icon.svg","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
+const PRECACHE = ["./","assets/cinzel-latin-700-normal-Dkw14w9r.woff2","assets/index-CRxqdlK0.js","assets/index-D3xRqHmp.css","assets/kalam-latin-700-normal-D2H-9ISU.woff2","assets/minefield_bg-HpDh139a.wasm","assets/music-DLVcjwsF.js","assets/render-DPbiQjPh.js","assets/viewer3d-BhqkHV2w.js","manifest.webmanifest","favicon.svg","icon.svg","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
