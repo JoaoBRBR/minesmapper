@@ -73,7 +73,7 @@ const CLEAN_CHUNK: i32 = 16;
 
 /// Chance that a safe cell hides an "ice clearer" power-up. Fixed and small on purpose: they
 /// are meant to be rare, found by luck.
-const ICE_CLEARER_RATE: f64 = 0.0012;
+const ICE_CLEARER_RATE: f64 = 0.0003;
 /// An ice clearer thins the ice over at most this many water cells (nearest to where it is used).
 const MAX_ICE_CELLS: usize = 6000;
 
@@ -1583,8 +1583,8 @@ mod tests {
                 }
             }
         }
-        // 90,000 cells, about 85% safe, at 0.12%
-        assert!((40..170).contains(&n), "found {n}");
+        // 90,000 cells, about 85% safe, at 0.03%: around 23
+        assert!((8..60).contains(&n), "found {n}");
     }
 
     #[test]
