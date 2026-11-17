@@ -57,26 +57,45 @@ export interface WorldMeta {
 
 export const WORLDGEN_VERSION = 2;
 
+/**
+ * A cleared island, kept on its own: deleting the world it came from does not remove it, and the
+ * 3D view only needs the settings (the terrain is rebuilt from the seed).
+ */
+export interface Trophy {
+  /** Same id as the world it came from. */
+  id: string;
+  name: string;
+  config: WorldConfig;
+  /** Fastest clearing time (ms). */
+  elapsedMs: number;
+  /** Portrait of the whole island. */
+  thumb: string | null;
+  wonAt: number;
+}
+
 const DB_NAME = 'minefield';
 const WORLDS = 'worlds';
 const STATES = 'states';
 const KV = 'kv';
+const TROPHIES = 'trophies';
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 const memWorlds = new Map<string, WorldMeta>();
 const memStates = new Map<string, Int32Array>();
 const memKV = new Map<string, unknown>();
+const memTrophies = new Map<string, Trophy>();
 
 function openDb(): Promise<IDBDatabase | null> {
   dbPromise ??= new Promise((resolve) => {
     try {
-      const req = indexedDB.open(DB_NAME, 2);
+      const req = indexedDB.open(DB_NAME, 3);
       req.onupgradeneeded = () => {
         // Runs for fresh installs (v0 -> v2) and upgrades (v1 -> v2); only add what is missing.
         const db = req.result;
         if (!db.objectStoreNames.contains(WORLDS)) db.createObjectStore(WORLDS, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(STATES)) db.createObjectStore(STATES);
         if (!db.objectStoreNames.contains(KV)) db.createObjectStore(KV);
+        if (!db.objectStoreNames.contains(TROPHIES)) db.createObjectStore(TROPHIES, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -161,6 +180,46 @@ export async function setKV(key: string, value: unknown): Promise<void> {
   }
   const tx = db.transaction(KV, 'readwrite');
   tx.objectStore(KV).put(value, key);
+  await done(tx);
+}
+
+/** Records (or updates) a trophy. The first win date, the portrait and the best time are kept. */
+export async function saveTrophy(t: Omit<Trophy, 'wonAt'> & { wonAt?: number }): Promise<void> {
+  const merge = (old: Trophy | undefined): Trophy => ({
+    ...t,
+    wonAt: old?.wonAt ?? t.wonAt ?? Date.now(),
+    thumb: t.thumb ?? old?.thumb ?? null,
+    elapsedMs: old && old.elapsedMs > 0 && (t.elapsedMs <= 0 || old.elapsedMs < t.elapsedMs) ? old.elapsedMs : t.elapsedMs,
+  });
+  const db = await openDb();
+  if (!db) {
+    memTrophies.set(t.id, merge(memTrophies.get(t.id)));
+    return;
+  }
+  const tx = db.transaction(TROPHIES, 'readwrite');
+  const store = tx.objectStore(TROPHIES);
+  const old = (await wrap(store.get(t.id))) as Trophy | undefined;
+  store.put(merge(old));
+  await done(tx);
+}
+
+/** All trophies, most recent first. */
+export async function listTrophies(): Promise<Trophy[]> {
+  const db = await openDb();
+  const all = db
+    ? await wrap(db.transaction(TROPHIES).objectStore(TROPHIES).getAll() as IDBRequest<Trophy[]>)
+    : [...memTrophies.values()];
+  return all.sort((a, b) => b.wonAt - a.wonAt);
+}
+
+export async function deleteTrophy(id: string): Promise<void> {
+  const db = await openDb();
+  if (!db) {
+    memTrophies.delete(id);
+    return;
+  }
+  const tx = db.transaction(TROPHIES, 'readwrite');
+  tx.objectStore(TROPHIES).delete(id);
   await done(tx);
 }
 

@@ -27,14 +27,18 @@ import { initMusic } from './musicBridge';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
+  deleteTrophy,
   deleteWorld,
   getState,
   getWorld,
+  listTrophies,
   listWorlds,
   requestPersistence,
+  saveTrophy,
   saveWorld,
   type Difficulty,
   type Mode,
+  type Trophy,
   type WorldConfig,
   type WorldMeta,
 } from './storage';
@@ -83,6 +87,7 @@ function saveCurrent(withThumb = false): Promise<void> {
   clearTimeout(saveTimer);
   if (!current || screen !== 'game') return saveChain;
   const s = snapshot();
+  const isWin = s.status === 'won' && current.config.mode === 'island';
   const meta: WorldMeta = {
     ...current,
     status: s.status,
@@ -93,11 +98,17 @@ function saveCurrent(withThumb = false): Promise<void> {
     elapsedMs: s.elapsedMs,
     cam: s.cam,
     updatedAt: Date.now(),
-    thumb: withThumb ? (thumbnail() ?? current.thumb) : current.thumb,
+    // a cleared island always gets its portrait, so its trophy has one
+    thumb: withThumb || (isWin && !current.thumb) ? (thumbnail() ?? current.thumb) : current.thumb,
   };
   current = meta;
   saveChain = saveChain
     .then(() => saveWorld(meta, s.state))
+    .then(() =>
+      isWin
+        ? saveTrophy({ id: meta.id, name: meta.name, config: meta.config, elapsedMs: meta.elapsedMs, thumb: meta.thumb })
+        : undefined,
+    )
     .catch((err) => console.error('Saving failed', err));
   return saveChain;
 }
@@ -202,7 +213,8 @@ function worldCard(m: WorldMeta) {
     title: 'Delete world',
     ariaLabel: `Delete ${m.name}`,
     onclick: async () => {
-      if (!confirm(`Delete "${m.name}" forever?`)) return;
+      const keeps = m.config.mode === 'island' && m.status === 'won';
+      if (!confirm(`Delete "${m.name}" forever?${keeps ? '\n\nIts trophy stays in Finished islands.' : ''}`)) return;
       await deleteWorld(m.id);
       if (current?.id === m.id) current = null;
       await renderHome();
@@ -238,7 +250,7 @@ async function renderHome() {
       ? worlds.map(worldCard)
       : [node('p', { class: 'empty', textContent: 'No worlds yet. Create your first one!' })]),
   );
-  const cleared = worlds.filter((m) => m.config.mode === 'island' && m.status === 'won').length;
+  const cleared = (await listTrophies()).length;
   el('h-trophies').textContent = cleared ? `🏆 Finished islands (${cleared})` : '🏆 Finished islands';
   const last = worlds.find((m) => m.status === 'playing');
   $continue.hidden = !last;
@@ -314,14 +326,52 @@ function bindViewer() {
   el('trophies-back').addEventListener('click', () => void goHome());
 }
 
+/** Shows a trophy in 3D (the terrain is rebuilt from its seed, so the world itself is not needed). */
+function trophyAsWorld(t: Trophy): WorldMeta {
+  return {
+    id: t.id,
+    name: t.name,
+    config: t.config,
+    status: 'won',
+    cleared: 0,
+    total: 0,
+    elapsedMs: t.elapsedMs,
+    cam: null,
+    thumb: t.thumb,
+    worldgen: t.config.gen ?? 1,
+    createdAt: t.wonAt,
+    updatedAt: t.wonAt,
+  };
+}
+
 async function openTrophies() {
-  const wins = (await listWorlds()).filter((m) => m.config.mode === 'island' && m.status === 'won');
+  const trophies = await listTrophies();
+  const stillThere = new Set<string>();
+  for (const t of trophies) if (await getWorld(t.id)) stillThere.add(t.id);
   el('trophy-list').replaceChildren(
-    ...(wins.length
-      ? wins.map((m) => {
-          const c = m.config;
+    ...(trophies.length
+      ? trophies.map((t) => {
+          const c = t.config;
           const thumb = node('div', { class: 'thumb' });
-          if (m.thumb) thumb.style.backgroundImage = `url(${m.thumb})`;
+          if (t.thumb) thumb.style.backgroundImage = `url(${t.thumb})`;
+          const actions: HTMLElement[] = [
+            node('button', { class: 'primary', textContent: '🌍 View in 3D', onclick: () => void openViewer(trophyAsWorld(t)) }),
+          ];
+          // the world itself may have been deleted: then there is no map to open
+          if (stillThere.has(t.id)) actions.push(node('button', { textContent: '👁 Open map', onclick: () => void openWorld(t.id) }));
+          actions.push(
+            node('button', {
+              class: 'danger',
+              textContent: '🗑',
+              title: 'Remove this trophy',
+              ariaLabel: `Remove the trophy ${t.name}`,
+              onclick: async () => {
+                if (!confirm(`Remove "${t.name}" from your Finished islands?`)) return;
+                await deleteTrophy(t.id);
+                await openTrophies();
+              },
+            } as Partial<HTMLButtonElement>),
+          );
           return node(
             'article',
             { class: 'card won' },
@@ -329,16 +379,11 @@ async function openTrophies() {
             node(
               'div',
               { class: 'info' },
-              node('div', { class: 'name' }, m.name, node('span', { class: 'badge won', textContent: '🏝 Cleared' })),
-              node('div', { class: 'meta', textContent: `${c.size}×${c.size} · ${c.difficulty} · ${fmtTime(m.elapsedMs)}` }),
-              node('div', { class: 'meta dim', textContent: `Seed ${c.seedText} · ${ago(m.updatedAt)}` }),
+              node('div', { class: 'name' }, t.name, node('span', { class: 'badge won', textContent: '🏝 Cleared' })),
+              node('div', { class: 'meta', textContent: `${c.size}×${c.size} · ${c.difficulty} · ${fmtTime(t.elapsedMs)}` }),
+              node('div', { class: 'meta dim', textContent: `Seed ${c.seedText} · ${ago(t.wonAt)}` }),
             ),
-            node(
-              'div',
-              { class: 'card-actions' },
-              node('button', { class: 'primary', textContent: '🌍 View in 3D', onclick: () => void openViewer(m) }),
-              node('button', { textContent: '👁 Open map', onclick: () => void openWorld(m.id) }),
-            ),
+            node('div', { class: 'card-actions' }, ...actions),
           );
         })
       : [node('p', { class: 'empty', textContent: 'No finished islands yet. Clear one to hang it here!' })]),
@@ -752,9 +797,24 @@ function bindSettings() {
 
 // --- Boot -------------------------------------------------------------------------------
 
+/** Islands cleared before trophies had their own storage get one now. */
+async function backfillTrophies() {
+  try {
+    const have = new Set((await listTrophies()).map((t) => t.id));
+    for (const m of await listWorlds()) {
+      if (m.config.mode === 'island' && m.status === 'won' && !have.has(m.id)) {
+        await saveTrophy({ id: m.id, name: m.name, config: m.config, elapsedMs: m.elapsedMs, thumb: m.thumb, wonAt: m.updatedAt });
+      }
+    }
+  } catch (err) {
+    console.warn('Could not carry over earlier trophies', err);
+  }
+}
+
 export async function start() {
   await init();
   await loadStats();
+  await backfillTrophies();
   initTheme();
   initMusic();
   requestPersistence();
