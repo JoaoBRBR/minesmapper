@@ -1,6 +1,7 @@
 import './style.css';
-import { installIcons } from './icons';
+import { artReady, installIcons } from './icons';
 import { start } from './app';
 
+await artReady;
 installIcons();
 await start();

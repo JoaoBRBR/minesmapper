@@ -1,9 +1,52 @@
-// Interface icons from art/ui replace the emoji and symbols used in text. The map is still drawn by canvas code.
+// All pictures come from the SVG files in art/. Map glyphs are rasterised to small canvases (cached per size
+// step, so each stamp on the map is a cheap 1:1 copy); interface icons replace emoji and symbols in text.
 
 const uiUrls = import.meta.glob(['../art/ui/*.svg', '../art/map/*.svg'], { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
+const mapOnly = import.meta.glob('../art/map/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const nameOf = (path: string) => path.replace(/^.*\//, '').replace(/\.svg$/, '');
 const uiArt = new Map(Object.entries(uiUrls).map(([p, u]) => [nameOf(p), u]));
+
+const mapImages = new Map<string, HTMLImageElement>();
+const sized = new Map<string, HTMLCanvasElement>();
+
+/** Resolves when every map glyph is decoded and ready to draw. */
+export const artReady = Promise.all(
+  Object.entries(mapOnly).map(async ([path, url]) => {
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+      mapImages.set(nameOf(path), img);
+    } catch {
+      /* the glyph is simply not drawn */
+    }
+  }),
+);
+
+export type Glyph = 'flag' | 'mine' | 'oracle-star' | 'ice-crystal' | 'treasure-x';
+
+function glyphAt(name: Glyph, px: number): CanvasImageSource | undefined {
+  const img = mapImages.get(name);
+  if (!img) return undefined;
+  // round the wanted size up to a power of two (16..256) so only a few copies are ever made
+  const step = Math.min(256, Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(1, px)))));
+  const key = `${name}@${step}`;
+  let c = sized.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = step;
+    c.getContext('2d')!.drawImage(img, 0, 0, step, step);
+    sized.set(key, c);
+  }
+  return c;
+}
+
+/** Draws a map glyph into the square with top-left (x, y) and side `size` (screen pixels). */
+export function drawGlyph(ctx: CanvasRenderingContext2D, name: Glyph, x: number, y: number, size: number) {
+  const g = glyphAt(name, size * (window.devicePixelRatio || 1));
+  if (g) ctx.drawImage(g, x, y, size, size);
+}
 
 // ---- interface icons in text ----
 

@@ -1,5 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import type { NumberStyle } from './settings';
+import { drawGlyph } from './icons';
 
 export interface Camera {
   /** World-space cell coordinate at the centre of the screen (fractional). */
@@ -444,18 +445,7 @@ export function draw(
 }
 
 function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const rad = i % 2 === 0 ? r : r * 0.45;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
-  }
-  ctx.closePath();
-  ctx.fillStyle = '#fbbf24';
-  ctx.fill();
-  ctx.lineWidth = Math.max(1, r * 0.25);
-  ctx.strokeStyle = '#78350f';
-  ctx.stroke();
+  drawGlyph(ctx, 'oracle-star', cx - r * 1.3, cy - r * 1.3, r * 2.6);
 }
 
 /** Segments where two neighbouring cells differ, found by comparing each cell with the one to its right and below. */
@@ -595,32 +585,7 @@ function drawWaves(
 
 /** The ice clearer's marker: a little ice crystal. */
 function drawCrystal(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.lineCap = 'round';
-  for (const [width, colour] of [
-    [r * 0.62, '#1d4e6e'],
-    [r * 0.3, '#d9f4ff'],
-  ] as const) {
-    ctx.lineWidth = width;
-    ctx.strokeStyle = colour;
-    ctx.beginPath();
-    for (let k = 0; k < 6; k++) {
-      const a = (k * Math.PI) / 3;
-      const [ca, sa] = [Math.cos(a), Math.sin(a)];
-      ctx.moveTo(0, 0);
-      ctx.lineTo(ca * r, sa * r);
-      // little branches
-      const bx = ca * r * 0.6;
-      const by = sa * r * 0.6;
-      for (const d of [0.9, -0.9]) {
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx + Math.cos(a + d) * r * 0.34, by + Math.sin(a + d) * r * 0.34);
-      }
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
+  drawGlyph(ctx, 'ice-crystal', cx - r * 1.3, cy - r * 1.3, r * 2.6);
 }
 
 /**
@@ -680,19 +645,7 @@ export function drawChunkBorders(
 }
 
 function drawFlag(ctx: CanvasRenderingContext2D, sx: number, sy: number, z: number) {
-  ctx.strokeStyle = '#1f2937';
-  ctx.lineWidth = Math.max(1, z * 0.07);
-  ctx.beginPath();
-  ctx.moveTo(sx + z * 0.38, sy + z * 0.18);
-  ctx.lineTo(sx + z * 0.38, sy + z * 0.82);
-  ctx.stroke();
-  ctx.fillStyle = '#dc2626';
-  ctx.beginPath();
-  ctx.moveTo(sx + z * 0.38, sy + z * 0.18);
-  ctx.lineTo(sx + z * 0.78, sy + z * 0.36);
-  ctx.lineTo(sx + z * 0.38, sy + z * 0.54);
-  ctx.closePath();
-  ctx.fill();
+  drawGlyph(ctx, 'flag', sx, sy, z);
 }
 
 function drawMine(ctx: CanvasRenderingContext2D, mx: number, my: number, z: number, exploded: boolean) {
@@ -700,19 +653,7 @@ function drawMine(ctx: CanvasRenderingContext2D, mx: number, my: number, z: numb
     ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
     ctx.fillRect(mx - z / 2, my - z / 2, z, z);
   }
-  ctx.fillStyle = '#111827';
-  ctx.beginPath();
-  ctx.arc(mx, my, z * 0.24, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#111827';
-  ctx.lineWidth = Math.max(1, z * 0.07);
-  ctx.beginPath();
-  for (let k = 0; k < 4; k++) {
-    const a = (k * Math.PI) / 4;
-    ctx.moveTo(mx - Math.cos(a) * z * 0.34, my - Math.sin(a) * z * 0.34);
-    ctx.lineTo(mx + Math.cos(a) * z * 0.34, my + Math.sin(a) * z * 0.34);
-  }
-  ctx.stroke();
+  drawGlyph(ctx, 'mine', mx - z / 2, my - z / 2, z);
 }
 
 const TEX = 256;

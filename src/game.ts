@@ -1,6 +1,7 @@
 import type { World } from './wasm/pkg/minefield';
 import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
+import { drawGlyph } from './icons';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
 import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
@@ -598,18 +599,8 @@ function drawTreasureX(cx: number, cy: number) {
     ctx.fill();
     return;
   }
-  const r = Math.max(9, cam.zoom * 0.42);
-  ctx.lineCap = 'round';
-  for (const [color, width] of [['#f4ecd8', r * 0.62], ['#b3261e', r * 0.36]] as const) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(sx - r, sy - r);
-    ctx.lineTo(sx + r, sy + r);
-    ctx.moveTo(sx + r, sy - r);
-    ctx.lineTo(sx - r, sy + r);
-    ctx.stroke();
-  }
+  const size = Math.max(22, cam.zoom * 1.1);
+  drawGlyph(ctx, 'treasure-x', sx - size / 2, sy - size / 2, size);
 }
 
 function renderScene(now: number) {
