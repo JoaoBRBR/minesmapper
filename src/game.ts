@@ -850,10 +850,16 @@ function cancelPendingTap() {
   lastDiscoveredTap = null;
 }
 
+/** Any ground you have discovered: numbers, empty cells, tidied-up ground and cleared sea. */
+function isDiscovered(x: number, y: number): boolean {
+  const b = world!.view(x, y, 1, 1)[0];
+  return (b & 0x30) === 0x20 || b === 0x0e;
+}
+
 function handleTap(px: number, py: number, secondary: boolean) {
   const plain = !secondary && !flagMode && !oracleMode && !iceMode && !progressView && !!world;
   const [cx, cy] = plain ? screenToCell(cam, w, h, px, py) : [0, 0];
-  if (!plain || !isChordable(cx, cy)) {
+  if (!plain || !isDiscovered(cx, cy)) {
     lastDiscoveredTap = null;
     activate(px, py, secondary);
     return;
@@ -865,7 +871,7 @@ function handleTap(px: number, py: number, secondary: boolean) {
     return;
   }
   lastDiscoveredTap = { x: px, y: py, t: now };
-  activate(px, py, false); // a chord happens right away when the flags match the number
+  activate(px, py, false); // a chord happens right away when the flags match the number (taps on tidied ground do nothing)
 }
 
 function doubleTapZoom(cx: number, cy: number) {
