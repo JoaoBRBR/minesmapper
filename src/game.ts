@@ -2,6 +2,7 @@ import type { World } from './wasm/pkg/minefield';
 import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
+import { maybeShowTip } from './tips';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
 import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
@@ -51,7 +52,8 @@ const $mode = el<HTMLButtonElement>('mode');
 const $home = el<HTMLButtonElement>('home');
 const $menu = el<HTMLButtonElement>('menu');
 const $oracle = el<HTMLButtonElement>('oracle');
-const $menuBadge = el('menu-badge');
+const $oracleN = el('oracle-n');
+const $iceN = el('ice-n');
 const $iceBtn = el<HTMLButtonElement>('iceclear');
 const $banner = el('banner');
 const $b3d = el<HTMLButtonElement>('b-3d');
@@ -463,11 +465,10 @@ function updateHud(now: number) {
   const clearers = wd.iceclearers_available();
   if (clearers === 0 && iceMode) iceMode = false;
   $iceBtn.hidden = clearers === 0;
-  setText($iceBtn, `❄ Ice clearer ×${clearers}`);
+  setText($iceN, `×${clearers}`);
   $iceBtn.setAttribute('aria-pressed', String(iceMode));
   $oracle.hidden = oracles === 0;
-  $menuBadge.hidden = oracles === 0 && clearers === 0;
-  setText($oracle, `✨ Oracle ×${oracles}`);
+  setText($oracleN, `×${oracles}`);
   $oracle.setAttribute('aria-pressed', String(oracleMode));
   canvas.classList.toggle('targeting', oracleMode || iceMode);
   if (progressView) setText($progressText, progressSummary(wd));
@@ -730,6 +731,20 @@ function activate(px: number, py: number, forceFlag: boolean) {
     useOracle(before, x, y);
     return;
   }
+  const got = wd.collect(x, y);
+  if (got) {
+    // a power-up lying on a revealed square: tapping it picks it up
+    if (got & 1) {
+      bump('oraclesFound');
+      toast(`✨ You picked up an oracle! (${wd.powerups_available()} ready)`);
+    }
+    if (got & 2) toast(`❄ You picked up an ice clearer! (${wd.iceclearers_available()} ready)`);
+    sound.found();
+    haptics.found();
+    invalidate();
+    cb.onChange();
+    return;
+  }
   if (forceFlag || flagMode) {
     wd.toggle_flag(x, y);
   } else if (isChordable(x, y)) {
@@ -753,7 +768,10 @@ function toggleOracleMode() {
   if (!wd || wd.powerups_available() === 0) return;
   iceMode = false;
   oracleMode = !oracleMode;
-  if (oracleMode) toast('Tap a hidden cell to learn the truth about it');
+  if (oracleMode) {
+    toast('Tap a hidden cell to learn the truth about it');
+    maybeShowTip('oracle');
+  }
   invalidate();
 }
 
@@ -762,7 +780,10 @@ function toggleIceMode() {
   if (!wd || wd.iceclearers_available() === 0) return;
   oracleMode = false;
   iceMode = !iceMode;
-  if (iceMode) toast('Tap a water cell to make that whole stretch of water see-through');
+  if (iceMode) {
+    toast('Tap a water cell to make that whole stretch of water see-through');
+    maybeShowTip('ice');
+  }
   invalidate();
 }
 

@@ -28,13 +28,11 @@
       <span class="chip" id="hearts" hidden aria-label="Hearts left"></span>
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
-      <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
-      <button id="iceclear" class="hud-extra" aria-pressed="false" hidden title="Make a whole stretch of water see-through (I)">❄ Ice clearer</button>
       <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
       <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <span class="chip hud-extra" id="pos">0, 0</span>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
-        <span class="ico">☰</span><span class="lbl"> Menu</span><span id="menu-badge" class="dot" hidden>✨</span>
+        <span class="ico">☰</span><span class="lbl"> Menu</span>
       </button>
     </div>
 
@@ -44,6 +42,22 @@
     </button>
 
     <div id="vignette" hidden></div>
+
+    <!-- Power-ups: round buttons, tap to arm them, tap again to put them away -->
+    <div id="powerups">
+      <button id="oracle" class="pu" aria-pressed="false" hidden aria-label="Oracle" title="Oracle: tap a hidden cell to learn the truth about it (O)"><span class="pu-ico">✨</span><span class="pu-n" id="oracle-n"></span></button>
+      <button id="iceclear" class="pu" aria-pressed="false" hidden aria-label="Ice clearer" title="Ice clearer: make a whole stretch of water see-through (I)"><span class="pu-ico">❄</span><span class="pu-n" id="ice-n"></span></button>
+    </div>
+
+    <!-- First time a power-up is armed: what it does -->
+    <div id="pu-tip" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="pu-tip-title"></div>
+        <div id="pu-tip-stage" class="tip-stage" aria-hidden="true"></div>
+        <p id="pu-tip-text"></p>
+        <button id="pu-tip-ok" class="primary">Got it</button>
+      </div>
+    </div>
 
     <div id="toast" role="status" hidden></div>
 
@@ -81,17 +95,36 @@
           <b id="pause-name"></b>
           <button id="p-resume" aria-label="Close menu">✕</button>
         </div>
-        <div class="menu-info" id="menu-pos"></div>
-        <div class="seg" id="m-mode">
+        <div class="menu-info desk-only" id="menu-pos"></div>
+        <div class="seg desk-only" id="m-mode">
           <button type="button" data-v="reveal">⛏ Reveal</button>
           <button type="button" data-v="flag">🚩 Flag</button>
         </div>
-        <button id="m-center">⌖ Center on the start</button>
-        <button id="m-progress">📊 View progress</button>
-        <button id="m-oracle" hidden>✨ Oracle</button>
-        <button id="m-ice" hidden>❄ Ice clearer</button>
-        <button id="m-3d" hidden>🌍 View the island in 3D</button>
-        <div class="menu-toggles">
+        <button id="m-center" class="desk-only">⌖ Center on the start</button>
+        <button id="m-progress" class="desk-only">📊 View progress</button>
+        <button id="m-3d" class="desk-only" hidden>🌍 View the island in 3D</button>
+        <div class="touch-menu mobile-only">
+          <div class="quick-row">
+            <button class="float-btn" data-quick="music" aria-label="Music"></button>
+            <button class="float-btn" data-quick="sound" aria-label="Sound"></button>
+            <button class="float-btn" data-quick="vibration" aria-label="Vibration"></button>
+          </div>
+          <label class="switch">
+            <b>Show borders</b>
+            <input type="checkbox" data-setting="chunkBorders" />
+          </label>
+          <label class="dm-row">
+            <b>Dark paper</b>
+            <span class="dm">
+              <input type="checkbox" data-setting="darkPaper" aria-label="Dark paper" />
+              <span class="dm-track"><span class="dm-ico">☀</span><span class="dm-ico">☾</span><span class="dm-knob"></span></span>
+            </span>
+          </label>
+          <button id="pm-advanced">⚙ Advanced</button>
+          <button id="pm-restart">↻ Restart</button>
+          <button id="pm-exit" class="primary">← Back to menu</button>
+        </div>
+        <div class="menu-toggles desk-only">
         <label class="switch">
           <b>Reveal animations</b>
           <input type="checkbox" id="m-animations" data-setting="animations" />
@@ -142,7 +175,7 @@
           <input type="checkbox" id="m-chunkBorders" data-setting="chunkBorders" />
         </label>
         </div>
-        <div class="row">
+        <div class="row desk-only">
           <button id="p-restart">↻ Restart</button>
           <button id="p-exit" class="primary">⌂ Save &amp; exit</button>
         </div>
@@ -227,9 +260,9 @@
     <!-- Main menu -->
     <main id="home-screen" class="screen" hidden>
       <div id="home-float" role="toolbar" aria-label="Quick settings">
-        <button id="h-music" class="float-btn" aria-label="Music" title="Music"></button>
-        <button id="h-audio" class="float-btn" aria-label="Sound" title="Sound effects"></button>
-        <button id="h-vibration" class="float-btn" aria-label="Vibration" title="Vibration"></button>
+        <button id="h-music" class="float-btn" data-quick="music" aria-label="Music" title="Music"></button>
+        <button id="h-audio" class="float-btn" data-quick="sound" aria-label="Sound" title="Sound effects"></button>
+        <button id="h-vibration" class="float-btn" data-quick="vibration" aria-label="Vibration" title="Vibration"></button>
         <button id="h-settings" class="float-btn" aria-label="Settings" title="Settings">⚙</button>
       </div>
       <a id="h-github" class="float-btn" href="https://github.com/joaobrbr" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">🐙</a>

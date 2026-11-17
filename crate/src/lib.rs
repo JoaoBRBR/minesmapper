@@ -103,7 +103,7 @@ pub const ST_CLEAN: u8 = 0x80;
 pub const ST_POWERUP: u8 = 0x40;
 pub const ST_MINE: u8 = 0x30; // low bit 1 = exploded, 0 = shown after loss
 /// Bump when the `export_state` layout changes.
-const STATE_VERSION: i32 = 3;
+const STATE_VERSION: i32 = 4;
 
 /// Hidden state with low nibble 0xF = not playable (water outside the island).
 pub const ST_VOID: u8 = 0x0f;
@@ -135,6 +135,8 @@ pub struct World {
     /// Power-ups found (revealed cells that hid one) and spent.
     powerups_found: u32,
     powerups_used: u32,
+    /// Revealed cells whose power-up the player has picked up (by tapping it).
+    collected: HashSet<(i32, i32)>,
     /// Per cleanup chunk: (safe cells in it, safe cells revealed so far).
     chunk_stats: HashMap<(i32, i32), (u16, u16)>,
     clean_chunks: HashSet<(i32, i32)>,
@@ -191,6 +193,7 @@ impl World {
             farthest: 0.0,
             powerups_found: 0,
             powerups_used: 0,
+            collected: HashSet::new(),
             chunk_stats: HashMap::new(),
             clean_chunks: HashSet::new(),
             clean_log: Vec::new(),
@@ -384,6 +387,14 @@ impl World {
             out.push(x);
             out.push(y);
         }
+        // Version 4: the power-ups picked up so far.
+        let mut got: Vec<(i32, i32)> = self.collected.iter().copied().collect();
+        got.sort_unstable();
+        out.push(got.len() as i32);
+        for (x, y) in got {
+            out.push(x);
+            out.push(y);
+        }
         out
     }
 
@@ -442,6 +453,15 @@ impl World {
             ice_seeds = body.chunks_exact(2).map(|c| (c[0], c[1])).collect();
             pos = end.unwrap();
         }
+        // Version 4 adds the picked-up power-ups; older saves picked up everything they revealed.
+        let collected = if version >= 4 {
+            match read_set(data, &mut pos) {
+                Some(c) => Some(c),
+                None => return false,
+            }
+        } else {
+            None
+        };
         if pos != data.len() {
             return false;
         }
@@ -452,6 +472,13 @@ impl World {
         self.revealed = revealed;
         self.flagged = flagged;
         self.exploded = exploded;
+        self.collected = collected.unwrap_or_else(|| {
+            self.revealed
+                .iter()
+                .copied()
+                .filter(|&(x, y)| self.is_powerup(x, y) || self.is_iceclearer(x, y))
+                .collect()
+        });
         self.powerups_used = used;
         self.ice_used = ice_used;
         self.ice_seeds = ice_seeds;
@@ -522,7 +549,7 @@ impl World {
         self.chunk_stats.clear();
         self.clean_chunks.clear();
         self.clean_log.clear();
-        self.ice_found = revealed.iter().filter(|&&(x, y)| self.is_iceclearer(x, y)).count() as u32;
+        self.ice_found = self.collected.iter().filter(|&&(x, y)| self.is_iceclearer(x, y)).count() as u32;
         self.ice_cells.clear();
         for seed in self.ice_seeds.clone() {
             self.flood_ice(seed);
@@ -538,12 +565,45 @@ impl World {
                 self.clean_chunks.insert(k);
             }
         }
-        self.powerups_found = revealed.iter().filter(|&&(x, y)| self.is_powerup(x, y)).count() as u32;
+        self.powerups_found = self.collected.iter().filter(|&&(x, y)| self.is_powerup(x, y)).count() as u32;
         for (x, y) in revealed {
             let d = dist_from_origin(x, y);
             self.points += cell_points(d);
             self.farthest = self.farthest.max(d);
         }
+    }
+
+    /// Power-ups under cells of a finished chunk are picked up for the player, since that ground is
+    /// about to be tidied away and could no longer be tapped.
+    fn collect_in_chunk(&mut self, k: (i32, i32)) {
+        for y in k.1 * CLEAN_CHUNK..(k.1 + 1) * CLEAN_CHUNK {
+            for x in k.0 * CLEAN_CHUNK..(k.0 + 1) * CLEAN_CHUNK {
+                if self.revealed.contains(&(x, y)) {
+                    self.collect(x, y);
+                }
+            }
+        }
+    }
+
+    /// Picks up the power-up under a revealed cell. Returns a bit mask: 1 = an oracle was
+    /// collected, 2 = an ice clearer, 0 = nothing (no power-up there, or already taken).
+    pub fn collect(&mut self, x: i32, y: i32) -> u32 {
+        if !self.revealed.contains(&(x, y)) || self.collected.contains(&(x, y)) {
+            return 0;
+        }
+        let mut got = 0;
+        if self.is_powerup(x, y) {
+            self.powerups_found += 1;
+            got |= 1;
+        }
+        if self.is_iceclearer(x, y) {
+            self.ice_found += 1;
+            got |= 2;
+        }
+        if got != 0 {
+            self.collected.insert((x, y));
+        }
+        got
     }
 
     /// Playable, non-mine cells in a cleanup chunk.
@@ -630,6 +690,7 @@ impl World {
         stat.1 += 1;
         if stat.1 >= stat.0 && self.clean_chunks.insert(k) {
             self.clean_log.extend([k.0, k.1]);
+            self.collect_in_chunk(k);
         }
     }
 
@@ -882,13 +943,7 @@ impl World {
             let d = dist_from_origin(cx, cy);
             self.points += cell_points(d);
             self.farthest = self.farthest.max(d);
-            if self.is_powerup(cx, cy) {
-                self.powerups_found += 1;
-            }
             self.note_revealed(cx, cy);
-            if self.is_iceclearer(cx, cy) {
-                self.ice_found += 1;
-            }
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -1005,7 +1060,7 @@ impl World {
                 } else if self.revealed.contains(&p) {
                     ST_REVEALED
                         | self.display_count(x, y)
-                        | if self.is_powerup(x, y) || self.is_iceclearer(x, y) { ST_POWERUP } else { 0 }
+                        | if (self.is_powerup(x, y) || self.is_iceclearer(x, y)) && !self.collected.contains(&p) { ST_POWERUP } else { 0 }
                 } else if self.game_over && self.is_mine(x, y) {
                     ST_MINE
                 } else if self.flagged.contains(&p) {
@@ -1390,6 +1445,27 @@ mod tests {
         let calm = count(0.15, 200); // ~0.12% of ~34k safe cells
         assert!((15..90).contains(&calm), "calm: {calm}");
         assert!(hard as f64 / 120.0f64.powi(2) > calm as f64 / 200.0f64.powi(2) * 10.0);
+    }
+
+    #[test]
+    fn power_ups_are_picked_up_by_tapping_them() {
+        let mut w = World::new(31, 0.30, 0.30, 0.0);
+        let p = (-30..30)
+            .flat_map(|y| (-30..30).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_powerup(x, y))
+            .expect("a power-up at 30% density");
+        w.reveal_unchecked(p.0, p.1);
+        assert_eq!(w.powerups_found(), 0, "revealing alone does not collect");
+        assert_eq!(w.collect(p.0 + 100, p.1), 0, "nothing under an unrevealed cell");
+        assert_eq!(w.collect(p.0, p.1) & 1, 1);
+        assert_eq!(w.powerups_found(), 1);
+        assert_eq!(w.collect(p.0, p.1), 0, "only once");
+        assert_eq!(w.powerups_available(), 1);
+        let saved = w.export_state();
+        let mut b = World::new(31, 0.30, 0.30, 0.0);
+        assert!(b.import_state(&saved));
+        assert_eq!(b.powerups_found(), 1);
+        assert_eq!(b.collect(p.0, p.1), 0, "still picked up after a reload");
     }
 
     #[test]

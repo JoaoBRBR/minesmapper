@@ -13,14 +13,10 @@ import {
   isFlagMode,
   toggleProgressView,
   loadWorld,
-  iceClearersAvailable,
-  oraclesAvailable,
   recenterView,
   setActive,
   setFlagMode,
   snapshot,
-  startIceTargeting,
-  startOracleTargeting,
   thumbnail,
 } from './game';
 import { initMusic } from './musicBridge';
@@ -665,14 +661,6 @@ function syncMenu() {
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
   });
-  const oracles = oraclesAvailable();
-  const oracle = el<HTMLButtonElement>('m-oracle');
-  oracle.hidden = oracles === 0;
-  oracle.textContent = `✨ Use an oracle (×${oracles})`;
-  const clearers = iceClearersAvailable();
-  const iceBtn = el<HTMLButtonElement>('m-ice');
-  iceBtn.hidden = clearers === 0;
-  iceBtn.textContent = `❄ Use an ice clearer (×${clearers})`;
   const island = current?.config.mode === 'island';
   el('m-3d').hidden = !(island && snapshot().status === 'won');
 }
@@ -707,17 +695,12 @@ function bindGameMenu() {
       void openViewer({ ...current, status: s.status, elapsedMs: s.elapsedMs });
     }
   });
-  el('m-ice').addEventListener('click', () => {
-    closePause();
-    startIceTargeting();
-  });
-  el('m-oracle').addEventListener('click', () => {
-    closePause();
-    startOracleTargeting();
-  });
   el('p-resume').addEventListener('click', closePause);
-  el('p-restart').addEventListener('click', () => void restartCurrent());
-  el('p-exit').addEventListener('click', () => void (current?.config.level ? openAdventure() : goHome()));
+  for (const id of ['p-restart', 'pm-restart']) el(id).addEventListener('click', () => void restartCurrent());
+  for (const id of ['p-exit', 'pm-exit']) {
+    el(id).addEventListener('click', () => void (current?.config.level ? openAdventure() : goHome()));
+  }
+  el('pm-advanced').addEventListener('click', () => el('h-settings').click());
   $pause.addEventListener('click', (e) => {
     if (e.target === $pause) closePause();
   });
@@ -987,31 +970,37 @@ function bindSettings() {
 
 /** The audio and vibration buttons floating on the main menu. */
 function bindQuickToggles() {
-  const music = el('h-music');
-  const audio = el('h-audio');
-  const vib = el('h-vibration');
-  const put = (b: HTMLElement, token: string) => {
-    if (b.dataset.t === token) return;
-    b.dataset.t = token;
-    b.textContent = token;
-  };
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-quick]')];
+  const tokens = () => ({
+    music: settings.music ? '♪' : '♫',
+    sound: settings.sound ? '🔊' : '🔇',
+    vibration: settings.vibration && vibrationSupported ? '📳' : '📴',
+  });
   const sync = () => {
-    put(music, settings.music ? '♪' : '♫');
-    put(audio, settings.sound ? '🔊' : '🔇');
-    put(vib, settings.vibration && vibrationSupported ? '📳' : '📴');
+    const t = tokens();
+    for (const b of buttons) {
+      const token = t[b.dataset.quick as keyof typeof t];
+      if (b.dataset.t === token) continue;
+      b.dataset.t = token;
+      b.textContent = token;
+    }
   };
   sync();
   onSettingsChange(sync);
-  music.addEventListener('click', () => setSetting('music', !settings.music));
-  audio.addEventListener('click', () => {
-    setSetting('sound', !settings.sound);
-    if (settings.sound) sound.test();
-  });
-  if (!vibrationSupported) vib.hidden = true;
-  vib.addEventListener('click', () => {
-    setSetting('vibration', !settings.vibration);
-    if (settings.vibration) haptics.test();
-  });
+  for (const b of buttons) {
+    const kind = b.dataset.quick;
+    if (kind === 'vibration' && !vibrationSupported) b.hidden = true;
+    b.addEventListener('click', () => {
+      if (kind === 'music') setSetting('music', !settings.music);
+      else if (kind === 'sound') {
+        setSetting('sound', !settings.sound);
+        if (settings.sound) sound.test();
+      } else {
+        setSetting('vibration', !settings.vibration);
+        if (settings.vibration) haptics.test();
+      }
+    });
+  }
 }
 
 // --- Boot -------------------------------------------------------------------------------

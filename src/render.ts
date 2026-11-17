@@ -327,8 +327,7 @@ export function draw(
         if (state === ST_REVEALED) {
           if (b & ST_POWERUP && zoom >= 12) {
             // an ice clearer (shade bit 0) is an ice crystal; an oracle is the gold star
-            if (data[k + 2] & 1) drawCrystal(ctx, sx + zoom * 0.8, sy + zoom * 0.24, zoom * 0.2);
-            else drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
+            drawPickup(ctx, sx + zoom * 0.7, sy + zoom * 0.3, zoom, (data[k + 2] & 1) === 1);
           }
           const n = b & 0x0f;
           if (n > 0 && zoom >= 12) {
@@ -444,8 +443,13 @@ export function draw(
 
 }
 
-function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  drawGlyph(ctx, 'oracle-star', cx - r * 1.3, cy - r * 1.3, r * 2.6);
+/** A power-up waiting to be tapped: the picture on a soft halo, so it is hard to miss. */
+function drawPickup(ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, ice: boolean) {
+  ctx.fillStyle = ice ? 'rgba(140, 210, 250, 0.55)' : 'rgba(255, 205, 70, 0.55)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, z * 0.34, 0, Math.PI * 2);
+  ctx.fill();
+  drawGlyph(ctx, ice ? 'ice-crystal' : 'oracle-glass', cx - z * 0.3, cy - z * 0.3, z * 0.6);
 }
 
 /** Segments where two neighbouring cells differ, found by comparing each cell with the one to its right and below. */
@@ -581,11 +585,6 @@ function drawWaves(
     ctx.strokeStyle = colour;
     ctx.stroke(path);
   }
-}
-
-/** The ice clearer's marker: a little ice crystal. */
-function drawCrystal(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  drawGlyph(ctx, 'ice-crystal', cx - r * 1.3, cy - r * 1.3, r * 2.6);
 }
 
 /**

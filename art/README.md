@@ -30,7 +30,7 @@ Open `index.html` in a browser to see all of them at once.
 |---|---|---|
 | `map/flag.svg` | 64×64 | A flag placed on a hidden square (also the flag-mode button and the 🚩 counter). |
 | `map/mine.svg` | 64×64 | A mine on the map (after a loss or when a heart is lost). Also used small as the mine counter (💣). The red square under an exploded mine is drawn by the game. |
-| `map/oracle-star.svg` | 64×64 | The oracle power-up under a revealed safe square, and the Oracle button. |
+| `map/oracle-glass.svg` | 64×64 | The oracle power-up (a magnifying glass) lying on a revealed safe square, and the Oracle button. |
 | `map/ice-crystal.svg` | 64×64 | The ice-clearer power-up under a revealed safe square, and the Ice clearer button. |
 | `map/treasure-x.svg` | 64×64 | The X on the treasure levels. |
 | `ui/heart-full.svg` | 48×48 | A heart you still have (HUD). |
@@ -66,6 +66,8 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/arrow-right.svg` | 48×48 | Direction arrows (→); the game rotates this one for ← ↑ ↓. |
 | `ui/arrow-back.svg` | 48×48 | Back buttons (←). |
 | `ui/play-next.svg` | 48×48 | Next level / Continue (▶). |
+| `ui/sun.svg` | 48×48 | Light paper (☀), in the Dark paper switch. |
+| `ui/moon.svg` | 48×48 | Dark paper (☾), in the Dark paper switch. |
 | `app/logo.svg` | 256×256 | The emblem on the main menu (a compass rose that is also a mine). The game name is written next to it as text. |
 | `ui/worlds.svg` | 48×48 | My worlds button (🗂). |
 | `ui/volume.svg` | 48×48 | Audio is on (🔊), floating button on the main menu. |
