@@ -1,6 +1,7 @@
 // Generative background music, built on Strudel (strudel.cc) and played by its Web Audio engine.
 //
-// * A looping background (pads, bass, soft textures) runs all the time, in one of three styles.
+// * A looping lo-fi background (keys, bass, soft drums, vinyl texture) runs all the time, in one of
+//   three styles: sunny lo-fi, late-night rainy lo-fi, and smoky lo-fi jazz.
 // * Player actions add notes on top, always inside the same key and motif:
 //     flag            -> one note of the scale (the motif steps forward with every flag)
 //     small area open -> a quick arpeggio of the current chord
@@ -13,9 +14,9 @@
 //
 // This module is loaded lazily (see musicBridge.ts) because Strudel is large.
 
-import { Fraction, Hap, Pattern, TimeSpan, note, s, sine, stack } from '@strudel/core';
+import { Fraction, Hap, Pattern, TimeSpan, note, s, stack } from '@strudel/core';
 import { miniAllStrings } from '@strudel/mini';
-import { getAudioContext, getSuperdoughAudioController, initAudio, registerSynthSounds, webaudioRepl } from '@strudel/webaudio';
+import { getAudioContext, getSuperdoughAudioController, initAudio, registerSynthSounds, setAudioContext, webaudioRepl } from '@strudel/webaudio';
 import type { MusicStyle } from './settings';
 
 // Let plain strings such as note('<[55,59] [60,64]>') use Strudel's mini-notation.
@@ -61,8 +62,16 @@ const noteBars = (notes: number[]) => `<${notes.join(' ')}>`;
 const stepBars = (bars: (number | null)[][]) =>
   `<${bars.map((bar) => `[${bar.map((n) => (n === null ? '~' : n)).join(' ')}]`).join(' ')}>`;
 
+// --- drums (all synthesised: a synth kick plus filtered noise) -----------------------------------------
+
+const kick = (steps: string, gain = 0.5) => s('sbd').struct(steps).decay(0.32).gain(gain);
+const snare = (steps: string, gain = 0.13) =>
+  s('white').struct(steps).hpf(900).bpf(2100).decay(0.13).sustain(0).gain(gain).room(0.2);
+const hats = (steps: string, gain = 0.035) => s('white').struct(steps).hpf(8500).decay(0.03).sustain(0).gain(gain);
+
 // --- the three styles -----------------------------------------------------------------------------
 
+/** Sunny lo-fi: major keys, a lazy beat and vinyl dust. */
 const DAWN: Style = {
   id: 'dawn',
   bpm: 74,
@@ -82,15 +91,17 @@ const DAWN: Style = {
     const chords = chordBars(this.chords);
     return stack(
       // soft pad
-      note(chords).s('sine').attack(0.5).release(1.8).lpf(1500).gain(0.1).room(0.4),
-      // rhodes-like comping
-      note(chords).s('triangle').struct('x ~ ~ [~ x] ~ ~ ~ ~').decay(0.6).sustain(0).release(0.3).lpf(1900).gain(0.15).room(0.45),
+      note(chords).s('sine').attack(0.5).release(1.8).lpf(1500).gain(0.09).room(0.4),
+      // rhodes-like comping, a little behind the beat
+      note(chords).s('triangle').struct('x ~ ~ [~ x] ~ ~ ~ ~').decay(0.6).sustain(0).release(0.3).lpf(1900).gain(0.15).room(0.45).swingBy(1 / 3, 4),
       // bass
       note(noteBars(this.bass)).s('sine').struct('x ~ ~ ~ ~ ~ [~ x] ~').attack(0.01).decay(0.5).sustain(0.3).release(0.4).lpf(280).gain(0.5),
-      // lo-fi hats and vinyl crackle
-      s('white').struct('~ x ~ x ~ x ~ x').decay(0.025).sustain(0).hpf(7000).gain(0.04),
+      // lazy beat: kick on 1 and the "and" of 3, snare on 2 and 4, swung hats
+      kick('x ~ ~ ~ ~ x ~ ~', 0.42),
+      snare('~ ~ x ~ ~ ~ x ~'),
+      hats('x x x x x x x x').swingBy(1 / 3, 4),
+      // vinyl dust and a ghost of melody
       s('crackle').density(0.1).gain(0.2),
-      // a ghost of melody
       note(stepBars([[null, 84, null, null, null, null, 79, null], [null, null, 81, null, null, null, null, null], [null, 79, null, null, 76, null, null, null], [null, null, null, 83, null, null, null, null]]))
         .s('sine').decay(0.8).sustain(0).delay(0.45).delaytime(0.4).delayfeedback(0.5).gain(0.06),
       moodLayer(this, mood),
@@ -98,70 +109,80 @@ const DAWN: Style = {
   },
 };
 
-const CLOISTER: Style = {
-  id: 'cloister',
-  bpm: 56,
-  root: 74,
-  scale: [0, 2, 3, 5, 7, 9, 10],
+/** Late-night lo-fi: A minor, slower and dimmer, rain on the window. */
+const RAIN: Style = {
+  id: 'rain',
+  bpm: 68,
+  root: 69,
+  scale: [0, 3, 5, 7, 10],
   chords: [
-    [57, 62, 65, 69], // Dm
-    [58, 62, 65, 69], // Bb
-    [57, 60, 64, 65], // F
-    [55, 62, 64, 67], // C add9
+    [60, 64, 67, 71], // Am9
+    [57, 60, 64, 67], // Fmaj9
+    [53, 57, 60, 64], // Dm9
+    [56, 59, 62, 65], // E7b9
   ],
-  bass: [38, 34, 41, 36],
-  motif: [0, 2, 4, 2, 5, 4, 2, 1],
-  victory: [0, 2, 4, 5, 6, 7, 6, 7],
-  tonic: [62, 69, 74, 77],
+  bass: [45, 41, 38, 40],
+  motif: [0, 1, 2, 3, 2, 1, 0, 4],
+  victory: [0, 1, 2, 3, 4, 5, 4, 5],
+  tonic: [57, 64, 69, 72],
   background(mood) {
     const chords = chordBars(this.chords);
     return stack(
-      // string pad, slowly breathing
-      note(chords).s('sawtooth').attack(1.4).release(2.6).lpf(sine.range(650, 1150).slow(8)).gain(0.085).room(0.6),
-      // harp arpeggio
-      note(stepBars([
-        [57, 62, 65, 69, 74, 69, 65, 62],
-        [58, 62, 65, 69, 74, 69, 65, 62],
-        [57, 60, 65, 69, 72, 69, 65, 60],
-        [55, 60, 64, 67, 72, 67, 64, 60],
-      ])).s('triangle').decay(0.55).sustain(0).release(0.3).lpf(3200).gain(0.11).room(0.55).delay(0.25).delaytime(0.32).delayfeedback(0.4),
-      // bass
-      note(noteBars(this.bass)).s('sine').attack(0.08).release(1.8).lpf(300).gain(0.42),
+      note(chords).s('sine').attack(0.7).release(2).lpf(1200).gain(0.1).room(0.5),
+      // muffled keys
+      note(chords).s('triangle').struct('x ~ ~ ~ ~ [~ x] ~ ~').decay(0.9).sustain(0).release(0.4).lpf(1500).gain(0.15).room(0.55).swingBy(1 / 3, 4),
+      note(noteBars(this.bass)).s('sine').struct('x ~ ~ ~ ~ ~ x ~').attack(0.01).decay(0.7).sustain(0.2).release(0.5).lpf(250).gain(0.5),
+      // slow, sleepy beat
+      kick('x ~ ~ ~ ~ ~ x ~', 0.4),
+      snare('~ ~ x ~ ~ ~ x ~', 0.1),
+      hats('~ x ~ x ~ x ~ x', 0.025).swingBy(1 / 3, 4),
+      // vinyl, and rain on the window
+      s('crackle').density(0.16).gain(0.22),
+      s('pink').attack(0.4).release(0.8).lpf(4200).hpf(1200).gain(0.028),
       moodLayer(this, mood),
     );
   },
 };
 
-const DEEP: Style = {
-  id: 'deep',
-  bpm: 48,
-  root: 77,
-  scale: [0, 2, 4, 6, 7, 9, 11],
+/** Smoky lo-fi jazz: ii-V-I-VI changes, a walking bass and brushed swing. */
+const JAZZ: Style = {
+  id: 'jazz',
+  bpm: 92,
+  root: 72,
+  scale: [0, 2, 4, 5, 7, 9, 11],
   chords: [
-    [57, 60, 64, 69], // Fmaj7
-    [59, 62, 67, 71], // G
-    [57, 60, 64, 67], // Am7
-    [60, 64, 67, 72], // C
+    [53, 57, 60, 64], // Dm9
+    [59, 64, 65, 69], // G13
+    [55, 59, 62, 64], // Cmaj9
+    [55, 61, 64, 65], // A7b13
   ],
-  bass: [41, 43, 45, 36],
-  motif: [0, 2, 4, 2, 5, 3, 1, 0],
+  bass: [38, 43, 48, 45],
+  motif: [0, 2, 4, 6, 5, 4, 2, 1],
   victory: [0, 2, 4, 6, 7, 6, 4, 7],
-  tonic: [65, 69, 72, 76],
+  tonic: [60, 64, 67, 71],
   background(mood) {
     const chords = chordBars(this.chords);
+    // a walking line: four quarter notes per bar
+    const walk = '<[38 41 45 48] [43 47 50 52] [48 52 55 52] [45 49 52 55]>';
     return stack(
-      note(chords).s('sawtooth').attack(2.2).release(3.2).lpf(sine.range(450, 1300).slow(16)).gain(0.075).room(0.8),
-      note(chords).s('sine').attack(1.6).release(3).gain(0.05).room(0.85).add(note(12)),
-      note(noteBars(this.bass)).s('sine').attack(0.4).release(2.4).lpf(260).gain(0.45),
-      // sparse bells, drowned in echo
-      note(stepBars([[null, null, null, null, 84, null, null, null], [null, null, 88, null, null, null, null, null], [null, null, null, null, null, 81, null, null], [86, null, null, null, null, null, 79, null]]))
-        .s('sine').fmi(1.2).fmh(2).decay(1.6).sustain(0).delay(0.6).delaytime(0.5).delayfeedback(0.6).room(0.9).gain(0.07),
+      note(chords).s('sine').attack(0.4).release(1.4).lpf(1300).gain(0.07).room(0.4),
+      // Charleston comping on the electric piano
+      note(chords).s('triangle').struct('x ~ ~ x ~ ~ ~ ~').decay(0.5).sustain(0).release(0.3).lpf(2200).gain(0.17).room(0.4).swingBy(1 / 3, 4),
+      note(walk).s('sine').attack(0.01).decay(0.35).sustain(0.15).release(0.2).lpf(520).gain(0.5),
+      // brushes: ride swing, chick on 2 and 4, a feathered kick
+      s('white').struct('x [~ x] x [~ x]').hpf(7000).decay(0.09).sustain(0).gain(0.035).swingBy(1 / 3, 4),
+      s('white').struct('~ x ~ x').hpf(5000).decay(0.05).sustain(0).gain(0.045),
+      kick('x x x x', 0.1),
+      s('crackle').density(0.07).gain(0.14),
+      // a lazy horn line
+      note(stepBars([[null, 76, null, 74, 72, null, null, null], [null, null, 74, null, 71, null, 69, null], [72, null, 76, null, 79, null, null, null], [null, 76, null, 73, null, 72, null, null]]))
+        .s('triangle').lpf(2300).decay(0.4).sustain(0).delay(0.3).delaytime(0.33).delayfeedback(0.35).gain(0.08).swingBy(1 / 3, 4),
       moodLayer(this, mood),
     );
   },
 };
 
-const STYLES: Record<MusicStyleId, Style> = { dawn: DAWN, cloister: CLOISTER, deep: DEEP };
+const STYLES: Record<MusicStyleId, Style> = { dawn: DAWN, rain: RAIN, jazz: JAZZ };
 
 /** The extra layer a biome adds to the background (empty in the default mood). */
 function moodLayer(style: Style, mood: Mood) {
@@ -264,11 +285,12 @@ function voice(flavor: Flavor, role: 'note' | 'pad'): Record<string, unknown> {
   if (flavor === 'ice') {
     return { s: 'sine', fmi: 3, fmh: 3.5, attack: 0.002, decay: 1.4, sustain: 0, release: 1.6, hpf: 450, gain: 0.22, room: 0.9, delay: 0.45, delaytime: echo * 1.33, delayfeedback: 0.6 };
   }
-  if (st.id === 'deep') {
-    return { s: 'sine', fmi: 1.4, fmh: 2, attack: 0.004, decay: 1.2, sustain: 0, release: 1.2, gain: 0.26, room: 0.8, delay: 0.4, delaytime: echo * 1.33, delayfeedback: 0.5 };
+  if (st.id === 'rain') {
+    return { s: 'triangle', attack: 0.006, decay: 0.9, sustain: 0, release: 0.9, lpf: 2000, gain: 0.28, room: 0.65, delay: 0.3, delaytime: echo * 1.33, delayfeedback: 0.45 };
   }
-  if (st.id === 'cloister') {
-    return { s: 'triangle', attack: 0.004, decay: 0.9, sustain: 0, release: 0.8, lpf: 3200, gain: 0.28, room: 0.6, delay: 0.25, delaytime: echo, delayfeedback: 0.4 };
+  if (st.id === 'jazz') {
+    // vibraphone-ish
+    return { s: 'sine', fmi: 1.1, fmh: 4, attack: 0.003, decay: 1.0, sustain: 0, release: 0.9, gain: 0.26, room: 0.5, delay: 0.22, delaytime: echo, delayfeedback: 0.35 };
   }
   return { s: 'triangle', attack: 0.004, decay: 0.5, sustain: 0, release: 0.5, lpf: 2600, gain: 0.3, room: 0.45, delay: 0.2, delaytime: echo, delayfeedback: 0.4 };
 }
@@ -356,43 +378,47 @@ export function chunk(flavor: Flavor) {
 let lastChunkTick = -1e9;
 
 /**
- * Hitting a mine: a slow, falling phrase in a minor colour, over a low minor chord, while the
- * background quietens for a few seconds. Anything cheerful still waiting is dropped.
+ * Hitting a mine: a fast, falling run that cuts through the calm, over a dark cluster chord and a
+ * low thud, while the background drops away for a few seconds. Anything cheerful still waiting
+ * is dropped.
  */
 export function lose() {
   if (!repl?.scheduler.started) return;
   const st = style();
   const sched = repl.scheduler;
   events = events.filter((e) => e.at < sched.lastEnd * TICKS); // keep only what is already underway
-  const at = nextSlot(BEAT);
-  // falling: fifth, fourth, minor third, second, tonic (natural-minor colour in every style)
-  const steps = [7, 5, 3, 2, 0];
-  steps.forEach((semi, i) => {
-    const last = i === steps.length - 1;
-    push('lose', at + i * BEAT, last ? BEAT * 3 : BEAT, {
+  const at = nextSlot(EIGHTH);
+  // a quick chromatic-ish tumble from the octave down to the tonic (a sixteenth-note triplet apart)
+  const run = [12, 11, 9, 8, 6, 5, 3, 2, 0];
+  run.forEach((semi, i) => {
+    const last = i === run.length - 1;
+    push('lose', at + i * 4, last ? BEAT * 3 : 4, {
       ...voice('default', 'note'),
-      s: 'sine',
+      s: last ? 'sine' : 'sawtooth',
       note: st.root + semi,
-      attack: 0.02,
-      decay: last ? 3 : 1.2,
-      release: last ? 3.5 : 1.4,
-      lpf: 1700,
-      gain: 0.3 - i * 0.02,
-      room: 0.8,
+      attack: 0.004,
+      decay: last ? 3 : 0.16,
+      sustain: 0,
+      release: last ? 3.5 : 0.22,
+      lpf: last ? 1600 : 3000,
+      gain: last ? 0.3 : 0.15 + (i / run.length) * 0.05,
+      room: 0.45,
+      delay: 0,
     }, 'default');
   });
-  // a low minor chord underneath
-  [st.root - 12, st.root - 9, st.root - 5].forEach((n) =>
-    push('lose', at, BEAT * 7, { ...voice('default', 'pad'), note: n, attack: 0.4, release: 3.2, lpf: 900, gain: 0.09 }, 'default'),
+  // a dissonant cluster (root, minor second, tritone) far below, and a thud
+  [st.root - 24, st.root - 23, st.root - 18].forEach((n) =>
+    push('lose', at, BEAT * 3, { ...voice('default', 'pad'), s: 'sawtooth', note: n, attack: 0.01, release: 2.4, lpf: 700, gain: 0.1 }, 'default'),
   );
-  // let it breathe: the background drops, then returns
+  push('lose', at, BEAT, { s: 'sbd', note: 31, decay: 0.7, gain: 0.55 }, 'default');
+  // the background drops away, then returns
   try {
-    getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(volumeNow * 0.9 * 0.4, getAudioContext().currentTime, 0.15);
+    getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(volumeNow * 0.9 * 0.35, getAudioContext().currentTime, 0.08);
   } catch {
     /* audio not ready */
   }
   clearTimeout(duckTimer);
-  duckTimer = window.setTimeout(() => setVolume(volumeNow), 5500);
+  duckTimer = window.setTimeout(() => setVolume(volumeNow), 3800);
 }
 
 export function win() {
@@ -441,14 +467,19 @@ export function setVolume(volume: number) {
   }
 }
 
-export function start(initialStyle: MusicStyleId, volume: number): Promise<void> {
+export function start(initialStyle: MusicStyleId, volume: number, unlocked?: AudioContext): Promise<void> {
   if (starting) return starting;
   starting = (async () => {
     styleId = initialStyle;
+    // Use the audio context that was created and unlocked inside the player's tap (essential on phones).
+    if (unlocked) setAudioContext(unlocked);
     await initAudio();
     registerSynthSounds();
     const ctx = getAudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (ctx.state !== 'running') {
+      await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 1500))]);
+      if (ctx.state !== 'running') throw new Error('the browser is still blocking audio');
+    }
     repl = webaudioRepl({});
     repl.scheduler.setCps(style().bpm / 60 / 4);
     setVolume(0);
@@ -457,7 +488,7 @@ export function start(initialStyle: MusicStyleId, volume: number): Promise<void>
     if (DEBUG) {
       (window as unknown as Record<string, unknown>).__music = {
         log: eventLog,
-        state: () => ({ started: repl.scheduler.started, now: repl.scheduler.now(), lastEnd: repl.scheduler.lastEnd, cps: repl.scheduler.cps, style: styleId, mood, ctx: getAudioContext().state, pending: events.length }),
+        state: () => ({ started: !!repl?.scheduler.started, now: repl?.scheduler.now(), lastEnd: repl?.scheduler.lastEnd, cps: repl?.scheduler.cps, style: styleId, mood, ctx: getAudioContext().state, pending: events.length }),
         level: () => {
           const ctx2 = getAudioContext();
           const an = ctx2.createAnalyser();
@@ -476,6 +507,7 @@ export function start(initialStyle: MusicStyleId, volume: number): Promise<void>
     console.warn('Music could not start', err);
     starting = null;
     repl = null;
+    throw err; // so the caller can try again on the next tap
   });
   return starting;
 }

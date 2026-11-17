@@ -71,13 +71,11 @@ fn powerup_rate(density: f32) -> f64 {
 /// and mines inside it (away from unfinished ground) are tidied away.
 const CLEAN_CHUNK: i32 = 16;
 
-/// Water "ice": revealing a water cell turns the water in the surrounding sections
-/// (this many cells on a side, plus the 8 neighbouring sections) see-through.
-const ICE_CHUNK: i32 = 8;
-
-fn ice_key(x: i32, y: i32) -> (i32, i32) {
-    (x.div_euclid(ICE_CHUNK), y.div_euclid(ICE_CHUNK))
-}
+/// Chance that a safe cell hides an "ice clearer" power-up. Fixed and small on purpose: they
+/// are meant to be rare, found by luck.
+const ICE_CLEARER_RATE: f64 = 0.0012;
+/// An ice clearer thins the ice over at most this many water cells (nearest to where it is used).
+const MAX_ICE_CELLS: usize = 6000;
 
 fn clean_key(x: i32, y: i32) -> (i32, i32) {
     (x.div_euclid(CLEAN_CHUNK), y.div_euclid(CLEAN_CHUNK))
@@ -104,7 +102,7 @@ pub const ST_CLEAN: u8 = 0x80;
 pub const ST_POWERUP: u8 = 0x40;
 pub const ST_MINE: u8 = 0x30; // low bit 1 = exploded, 0 = shown after loss
 /// Bump when the `export_state` layout changes.
-const STATE_VERSION: i32 = 2;
+const STATE_VERSION: i32 = 3;
 
 /// Hidden state with low nibble 0xF = not playable (water outside the island).
 pub const ST_VOID: u8 = 0x0f;
@@ -139,9 +137,11 @@ pub struct World {
     clean_chunks: HashSet<(i32, i32)>,
     /// Chunks that became clean since the last `take_clean_log` (`cx, cy` pairs).
     clean_log: Vec<i32>,
-    /// Ice sections that contain a revealed water cell, and those plus their neighbours.
-    ice_seeded: HashSet<(i32, i32)>,
-    ice_chunks: HashSet<(i32, i32)>,
+    /// Ice clearers found / spent, where they were used, and the water cells now see-through.
+    ice_found: u32,
+    ice_used: u32,
+    ice_seeds: Vec<(i32, i32)>,
+    ice_cells: HashSet<(i32, i32)>,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -176,8 +176,10 @@ impl World {
             chunk_stats: HashMap::new(),
             clean_chunks: HashSet::new(),
             clean_log: Vec::new(),
-            ice_seeded: HashSet::new(),
-            ice_chunks: HashSet::new(),
+            ice_found: 0,
+            ice_used: 0,
+            ice_seeds: Vec::new(),
+            ice_cells: HashSet::new(),
             island: None,
             mines_total: 0,
         }
@@ -298,6 +300,12 @@ impl World {
             }
         }
         out.push(self.powerups_used as i32);
+        out.push(self.ice_used as i32);
+        out.push(self.ice_seeds.len() as i32);
+        for &(x, y) in &self.ice_seeds {
+            out.push(x);
+            out.push(y);
+        }
         out
     }
 
@@ -336,6 +344,26 @@ impl World {
         } else {
             0
         };
+        // Version 3 adds the ice clearers: how many were spent, and where.
+        let mut ice_used = 0u32;
+        let mut ice_seeds: Vec<(i32, i32)> = Vec::new();
+        if version >= 3 {
+            let (Some(&u), Some(&n)) = (data.get(pos), data.get(pos + 1)) else {
+                return false;
+            };
+            if u < 0 || n < 0 {
+                return false;
+            }
+            let end = pos
+                .checked_add(2)
+                .and_then(|p| (n as usize).checked_mul(2).and_then(|m| p.checked_add(m)));
+            let Some(body) = end.and_then(|e| data.get(pos + 2..e)) else {
+                return false;
+            };
+            ice_used = u as u32;
+            ice_seeds = body.chunks_exact(2).map(|c| (c[0], c[1])).collect();
+            pos = end.unwrap();
+        }
         if pos != data.len() {
             return false;
         }
@@ -347,6 +375,8 @@ impl World {
         self.flagged = flagged;
         self.exploded = exploded;
         self.powerups_used = used;
+        self.ice_used = ice_used;
+        self.ice_seeds = ice_seeds;
         self.reveal_log.clear();
         self.recompute_score();
         self.recount_mines();
@@ -411,10 +441,10 @@ impl World {
         self.chunk_stats.clear();
         self.clean_chunks.clear();
         self.clean_log.clear();
-        self.ice_seeded.clear();
-        self.ice_chunks.clear();
-        for &(x, y) in &revealed {
-            self.note_water(x, y);
+        self.ice_found = revealed.iter().filter(|&&(x, y)| self.is_iceclearer(x, y)).count() as u32;
+        self.ice_cells.clear();
+        for seed in self.ice_seeds.clone() {
+            self.flood_ice(seed);
         }
         let mut per_chunk: HashMap<(i32, i32), u16> = HashMap::new();
         for &(x, y) in &revealed {
@@ -454,16 +484,26 @@ impl World {
         chunk[((y.rem_euclid(CH) * CH + x.rem_euclid(CH)) * 2) as usize] <= B_OCEAN
     }
 
-    /// A revealed water cell melts the ice around it: its section and the 8 around it.
-    fn note_water(&mut self, x: i32, y: i32) {
-        if !self.is_water(x, y) {
-            return;
-        }
-        let k = ice_key(x, y);
-        if self.ice_seeded.insert(k) {
+    /// Makes every water cell connected to `seed` see-through (up to `MAX_ICE_CELLS`).
+    fn flood_ice(&mut self, seed: (i32, i32)) {
+        let mut queue = VecDeque::from([seed]);
+        let mut seen: HashSet<(i32, i32)> = HashSet::from([seed]);
+        let mut count = 0;
+        while let Some((x, y)) = queue.pop_front() {
+            if count >= MAX_ICE_CELLS {
+                break;
+            }
+            if !self.is_playable(x, y) || !self.is_water(x, y) {
+                continue;
+            }
+            self.ice_cells.insert((x, y));
+            count += 1;
             for dy in -1..=1 {
                 for dx in -1..=1 {
-                    self.ice_chunks.insert((k.0 + dx, k.1 + dy));
+                    let p = (x + dx, y + dy);
+                    if seen.insert(p) {
+                        queue.push_back(p);
+                    }
                 }
             }
         }
@@ -471,7 +511,7 @@ impl World {
 
     /// Bits describing a hidden/flagged cell's ice state (see `ST_ICE`).
     fn ice_bits(&self, x: i32, y: i32, biome: u8) -> u8 {
-        if biome <= B_OCEAN && self.ice_chunks.contains(&ice_key(x, y)) {
+        if biome <= B_OCEAN && self.ice_cells.contains(&(x, y)) {
             ST_ICE | if self.is_mine(x, y) { ST_ICE_MINE } else { 0 }
         } else {
             0
@@ -567,6 +607,47 @@ impl World {
         }
         let threshold = (powerup_rate(self.density_at(x, y)) * u32::MAX as f64) as u32;
         hash(self.seed ^ 0xa5a5_1234, x, y) < threshold
+    }
+
+    /// Whether a (safe) cell hides an ice clearer. Random, fixed rate, deterministic from the seed.
+    pub fn is_iceclearer(&self, x: i32, y: i32) -> bool {
+        if !self.is_playable(x, y) || self.is_mine(x, y) {
+            return false;
+        }
+        let threshold = (ICE_CLEARER_RATE * u32::MAX as f64) as u32;
+        hash(self.seed ^ 0x1cec_1ea5, x, y) < threshold
+    }
+
+    pub fn iceclearers_found(&self) -> u32 {
+        self.ice_found
+    }
+
+    pub fn iceclearers_available(&self) -> u32 {
+        self.ice_found.saturating_sub(self.ice_used)
+    }
+
+    /// Spends an ice clearer on a water cell near explored ground: the whole stretch of water it
+    /// belongs to becomes see-through, mines faintly visible. Returns 0 = none available,
+    /// 1 = done, 2 = not allowed there (not water, or too far; nothing is spent), 3 = already clear.
+    pub fn use_ice_clearer(&mut self, x: i32, y: i32) -> u32 {
+        if self.iceclearers_available() == 0 {
+            return 0;
+        }
+        if self.game_over
+            || self.won
+            || !self.is_playable(x, y)
+            || !self.is_water(x, y)
+            || !(self.revealed.contains(&(x, y)) || self.can_reveal(x, y))
+        {
+            return 2;
+        }
+        if self.ice_cells.contains(&(x, y)) {
+            return 3;
+        }
+        self.ice_used += 1;
+        self.ice_seeds.push((x, y));
+        self.flood_ice((x, y));
+        1
     }
 
     /// Power-ups collected so far (including spent ones).
@@ -715,7 +796,9 @@ impl World {
                 self.powerups_found += 1;
             }
             self.note_revealed(cx, cy);
-            self.note_water(cx, cy);
+            if self.is_iceclearer(cx, cy) {
+                self.ice_found += 1;
+            }
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -821,7 +904,7 @@ impl World {
                 } else if self.revealed.contains(&p) {
                     ST_REVEALED
                         | self.display_count(x, y)
-                        | if self.is_powerup(x, y) { ST_POWERUP } else { 0 }
+                        | if self.is_powerup(x, y) || self.is_iceclearer(x, y) { ST_POWERUP } else { 0 }
                 } else if self.game_over && self.is_mine(x, y) {
                     ST_MINE
                 } else if self.flagged.contains(&p) {
@@ -1368,38 +1451,6 @@ mod tests {
     }
 
     #[test]
-    fn revealing_water_melts_the_ice_around_it() {
-        // An endless world whose start cell is water.
-        let seed = (0..400u32)
-            .find(|&sd| {
-                let w = World::new(sd, 0.15, 0.15, 0.0);
-                w.is_water(0, 0) && w.is_water(3, 3)
-            })
-            .expect("a seed that starts in water");
-        let mut w = World::new(seed, 0.15, 0.15, 0.0);
-        // Before anything is revealed there is no ice anywhere.
-        assert!(w.view(-20, -20, 40, 40).chunks(3).all(|c| c[0] & 0xC0 == 0));
-        w.reveal(0, 0);
-        let v = w.view(-30, -30, 60, 60);
-        let mut ice = 0;
-        for (i, c) in v.chunks(3).enumerate() {
-            let (x, y) = (-30 + (i % 60) as i32, -30 + (i / 60) as i32);
-            let hidden = c[0] & 0x30 == 0 || c[0] & 0x30 == ST_FLAG;
-            if hidden && c[0] & ST_ICE != 0 {
-                ice += 1;
-                assert!(c[1] <= B_OCEAN, "ice on land at ({x},{y})");
-                assert_eq!(c[0] & ST_ICE_MINE != 0, w.is_mine(x, y), "mine hint wrong at ({x},{y})");
-            } else if hidden {
-                assert_eq!(c[0] & ST_ICE_MINE, 0);
-            }
-        }
-        assert!(ice > 20, "expected an icy area around the opened water, got {ice} cells");
-        // Water far from anything revealed is still unreached.
-        let far = w.view(300, 300, 40, 40);
-        assert!(far.chunks(3).all(|c| c[0] & 0xC0 == 0));
-    }
-
-    #[test]
     fn numbers_next_to_tidied_ground_ignore_the_hidden_mines() {
         let mut w = World::new(12, 0.2, 0.2, 0.0);
         w.reveal(0, 0);
@@ -1463,5 +1514,85 @@ mod tests {
         assert!(land > 1000);
         // Endless worlds have no island to show.
         assert!(World::new(1, 0.15, 0.15, 0.0).island_snapshot().is_empty());
+    }
+
+    #[test]
+    fn ice_clearer_makes_a_whole_water_body_see_through() {
+        let seed = (0..400u32)
+            .find(|&sd| {
+                let w = World::new(sd, 0.15, 0.15, 0.0);
+                w.is_water(0, 0) && w.is_water(3, 3)
+            })
+            .expect("a seed that starts in water");
+        let mut w = World::new(seed, 0.15, 0.15, 0.0);
+        w.reveal(0, 0);
+        // The opening flood may by chance have uncovered a clearer; this test hands them out itself.
+        w.ice_found = 0;
+        let icy = |w: &World| {
+            w.view(-30, -30, 60, 60)
+                .chunks(3)
+                .enumerate()
+                .filter(|(_, c)| c[0] & 0x30 != 0x20 && c[0] & ST_ICE != 0)
+                .count()
+        };
+        // Revealing water does not melt any ice by itself, and without a clearer nothing happens.
+        assert_eq!(icy(&w), 0);
+        assert_eq!(w.use_ice_clearer(0, 0), 0);
+
+        w.ice_found = 2;
+        // Too far from explored ground: refused, and nothing is spent.
+        assert_eq!(w.use_ice_clearer(900, 900), 2);
+        assert_eq!(w.iceclearers_available(), 2);
+
+        assert_eq!(w.use_ice_clearer(0, 0), 1);
+        assert_eq!(w.iceclearers_available(), 1);
+        assert_eq!(w.use_ice_clearer(0, 0), 3, "already clear");
+        assert_eq!(w.iceclearers_available(), 1);
+
+        let v = w.view(-30, -30, 60, 60);
+        let mut ice = 0;
+        for (i, c) in v.chunks(3).enumerate() {
+            let (x, y) = (-30 + (i % 60) as i32, -30 + (i / 60) as i32);
+            let hidden = c[0] & 0x30 == 0 || c[0] & 0x30 == ST_FLAG;
+            if hidden && c[0] & ST_ICE != 0 {
+                ice += 1;
+                assert!(c[1] <= B_OCEAN, "ice on land at ({x},{y})");
+                assert_eq!(c[0] & ST_ICE_MINE != 0, w.is_mine(x, y), "mine hint wrong at ({x},{y})");
+            } else if hidden {
+                assert_eq!(c[0] & ST_ICE_MINE, 0);
+            }
+        }
+        assert!(ice > 20, "expected a see-through stretch of water, got {ice} cells");
+
+        // It survives a save and a load.
+        let mut b = World::new(seed, 0.15, 0.15, 0.0);
+        assert!(b.import_state(&w.export_state()));
+        assert_eq!(w.view(-30, -30, 60, 60), b.view(-30, -30, 60, 60));
+        assert_eq!(b.ice_used, 1);
+    }
+
+    #[test]
+    fn ice_clearers_are_rare_random_and_never_under_mines() {
+        let w = World::new(21, 0.15, 0.15, 0.0);
+        let mut n = 0;
+        for x in 0..300 {
+            for y in 0..300 {
+                if w.is_iceclearer(x, y) {
+                    assert!(!w.is_mine(x, y));
+                    n += 1;
+                }
+            }
+        }
+        // 90,000 cells, about 85% safe, at 0.12%
+        assert!((40..170).contains(&n), "found {n}");
+    }
+
+    #[test]
+    fn older_saves_without_ice_data_still_load() {
+        let mut w = World::new(2, 0.15, 0.15, 0.0);
+        assert!(w.import_state(&[2, 1, 0, 0, 1, 0, 0, 0, 0, 0]));
+        assert_eq!(w.ice_used, 0);
+        assert!(!w.import_state(&[3, 1, 0, 0, 1, 0, 0, 0, 0, 0]), "v3 needs the ice counters");
+        assert!(w.import_state(&[3, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]));
     }
 }

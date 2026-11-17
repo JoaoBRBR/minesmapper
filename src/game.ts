@@ -44,6 +44,7 @@ const $home = el<HTMLButtonElement>('home');
 const $menu = el<HTMLButtonElement>('menu');
 const $oracle = el<HTMLButtonElement>('oracle');
 const $menuBadge = el('menu-badge');
+const $iceBtn = el<HTMLButtonElement>('iceclear');
 const $banner = el('banner');
 const $b3d = el<HTMLButtonElement>('b-3d');
 const $bannerTitle = el('banner-title');
@@ -58,6 +59,8 @@ let active = false;
 let flagMode = false;
 /** True after pressing the Oracle button: the next tap on a hidden cell spends one. */
 let oracleMode = false;
+/** Same idea for the ice clearer: the next tap on a water cell spends one. */
+let iceMode = false;
 const cam: Camera = { cx: HOME.x, cy: HOME.y, zoom: 32 };
 let w = 0;
 let h = 0;
@@ -121,6 +124,7 @@ export function loadWorld(
   endFx = null;
   denied = null;
   oracleMode = false;
+  iceMode = false;
   glide = null;
   pointers.clear();
   $timer.hidden = config.mode !== 'island';
@@ -186,6 +190,7 @@ export function setActive(on: boolean) {
     endFx = null;
     denied = null;
     oracleMode = false;
+    iceMode = false;
   } else {
     resize();
   }
@@ -314,11 +319,16 @@ function updateHud(now: number) {
   }
   const oracles = wd.powerups_available();
   if (oracles === 0 && oracleMode) oracleMode = false;
+  const clearers = wd.iceclearers_available();
+  if (clearers === 0 && iceMode) iceMode = false;
+  $iceBtn.hidden = clearers === 0;
+  setText($iceBtn, `❄ Ice clearer ×${clearers}`);
+  $iceBtn.setAttribute('aria-pressed', String(iceMode));
   $oracle.hidden = oracles === 0;
-  $menuBadge.hidden = oracles === 0;
+  $menuBadge.hidden = oracles === 0 && clearers === 0;
   setText($oracle, `✨ Oracle ×${oracles}`);
   $oracle.setAttribute('aria-pressed', String(oracleMode));
-  canvas.classList.toggle('targeting', oracleMode);
+  canvas.classList.toggle('targeting', oracleMode || iceMode);
   if (now - lastMoodCheck > 1500) {
     // The music follows the biome in the middle of the screen.
     lastMoodCheck = now;
@@ -461,7 +471,12 @@ function activate(px: number, py: number, forceFlag: boolean) {
     over: wd.is_game_over(),
     won: wd.is_won(),
     found: wd.powerups_found(),
+    iceFound: wd.iceclearers_found(),
   };
+  if (iceMode && !forceFlag) {
+    useIceClearer(x, y);
+    return;
+  }
   if (oracleMode && !forceFlag) {
     useOracle(before, x, y);
     return;
@@ -481,13 +496,47 @@ function activate(px: number, py: number, forceFlag: boolean) {
   cb.onChange();
 }
 
-type Before = { score: number; flags: number; over: boolean; won: boolean; found: number };
+type Before = { score: number; flags: number; over: boolean; won: boolean; found: number; iceFound: number };
 
 function toggleOracleMode() {
   const wd = world;
   if (!wd || wd.powerups_available() === 0) return;
+  iceMode = false;
   oracleMode = !oracleMode;
   if (oracleMode) toast('Tap a hidden cell to learn the truth about it');
+  invalidate();
+}
+
+function toggleIceMode() {
+  const wd = world;
+  if (!wd || wd.iceclearers_available() === 0) return;
+  oracleMode = false;
+  iceMode = !iceMode;
+  if (iceMode) toast('Tap a water cell to make that whole stretch of water see-through');
+  invalidate();
+}
+
+/** Spends an ice clearer on the tapped water: all the water connected to it turns to clear ice. */
+function useIceClearer(x: number, y: number) {
+  const wd = world!;
+  const result = wd.use_ice_clearer(x, y);
+  if (result === 2) {
+    denied = { x, y, t0: performance.now() };
+    toast(`Pick a water cell within ${wd.reach()} cells of explored ground`);
+    sound.blocked();
+    haptics.blocked();
+  } else if (result === 3) {
+    toast('That water is already clear');
+  } else {
+    iceMode = false;
+    if (result === 1) {
+      sound.ice();
+      haptics.oracle();
+      toast('❄ The ice is clear: you can see the mines beneath');
+      musicArea(6, 'ice');
+      cb.onChange();
+    }
+  }
   invalidate();
 }
 
@@ -613,6 +662,12 @@ function feedback(
     haptics.found();
   }
 
+  if (wd.iceclearers_found() > before.iceFound) {
+    toast(`❄ You found an ice clearer! (${wd.iceclearers_available()} ready)`);
+    sound.found();
+    haptics.found();
+  }
+
   if (cfg?.mode === 'endless' && revealed > 0) noteEndless(cfg.difficulty, wd.points(), wd.farthest());
 }
 
@@ -715,8 +770,9 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') toggleFlagMode();
   if (e.key === 'c' || e.key === 'C' || e.key === 'Home') recenter();
   if (e.key === 'o' || e.key === 'O') toggleOracleMode();
+  if (e.key === 'i' || e.key === 'I') toggleIceMode();
   if (e.key === 'Escape') {
-    if (oracleMode) oracleMode = false;
+    if (oracleMode || iceMode) oracleMode = iceMode = false;
     else cb.onMenu();
   }
 });
@@ -724,6 +780,7 @@ $mode.addEventListener('click', toggleFlagMode);
 $home.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
 $oracle.addEventListener('click', toggleOracleMode);
+$iceBtn.addEventListener('click', toggleIceMode);
 const settled = (fn: () => void) => () => {
   if (performance.now() - bannerShownAt > 500) fn();
 };
@@ -773,5 +830,10 @@ export function startOracleTargeting() {
   toggleOracleMode();
 }
 
+export function startIceTargeting() {
+  toggleIceMode();
+}
+
+export const iceClearersAvailable = () => (world ? world.iceclearers_available() : 0);
 export const oraclesAvailable = () => (world ? world.powerups_available() : 0);
 export const isOracleTargeting = () => oracleMode;

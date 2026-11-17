@@ -11,6 +11,8 @@ type Mood = Flavor;
 let engine: Engine | null = null;
 let loading: Promise<void> | null = null;
 let gesture = false;
+let audioCtx: AudioContext | null = null;
+let lastFail = 0;
 let appliedStyle = settings.musicStyle;
 let appliedVolume = settings.musicVolume;
 
@@ -27,17 +29,58 @@ export function flavorOf(state: number, biome: number): Flavor {
   return 'default';
 }
 
-async function ensure() {
-  if (!settings.music || !gesture) return;
-  if (!loading) {
-    loading = import('./music').then(async (m) => {
+/** Loads the engine and starts the music (needs `audioCtx` to have been unlocked by a tap). */
+function ensure() {
+  if (!settings.music || !gesture || !audioCtx) return;
+  if (engine?.isRunning() || loading) return;
+  // If an attempt just failed, wait a few seconds before the next one.
+  if (performance.now() - lastFail < 3000) return;
+  loading = import('./music')
+    .then(async (m) => {
       engine = m;
-      await m.start(settings.musicStyle, settings.musicVolume);
+      await m.start(settings.musicStyle, settings.musicVolume, audioCtx!);
       appliedStyle = settings.musicStyle;
       appliedVolume = settings.musicVolume;
+    })
+    .catch((err) => {
+      lastFail = performance.now();
+      console.warn('Music did not start; it will retry on the next tap.', err);
+    })
+    .finally(() => {
+      loading = null;
     });
+}
+
+/**
+ * Browsers only let a page make sound after a real tap, and phones are strict about it: the audio
+ * context has to be created and resumed *inside* the tap handler (not after an async download).
+ * This runs on every kind of tap or key press until the music is going, and again whenever the
+ * system has silenced the audio (a call, the screen locking, the tab sleeping).
+ */
+function unlock() {
+  if (!settings.music) return;
+  try {
+    audioCtx ??= new AudioContext({ latencyHint: 'playback' });
+    if (audioCtx.state === 'running') {
+      gesture = true;
+      ensure();
+      return;
+    }
+    void audioCtx.resume();
+    // A silent blip inside the gesture fully unlocks audio on iPhones.
+    const blip = audioCtx.createBufferSource();
+    blip.buffer = audioCtx.createBuffer(1, 1, 22050);
+    blip.connect(audioCtx.destination);
+    blip.start(0);
+    audioCtx.onstatechange = () => {
+      if (audioCtx?.state === 'running') {
+        gesture = true;
+        ensure();
+      }
+    };
+  } catch {
+    /* no Web Audio on this device */
   }
-  await loading.catch(() => {});
 }
 
 function sync() {
@@ -47,8 +90,8 @@ function sync() {
     return;
   }
   if (!engine?.isRunning()) {
-    loading = null;
-    void ensure();
+    unlock();
+    ensure();
     return;
   }
   if (settings.musicStyle !== appliedStyle) {
@@ -61,16 +104,33 @@ function sync() {
   }
 }
 
+/** A small hint when the page is open but silent because nobody has tapped yet. */
+function hintIfSilent() {
+  window.setTimeout(() => {
+    if (!settings.music || audioCtx?.state === 'running') return;
+    const toast = document.querySelector<HTMLElement>('#toast');
+    if (!toast) return;
+    toast.textContent = '♪ Tap anywhere to start the music';
+    toast.hidden = false;
+    window.setTimeout(() => {
+      if (toast.textContent?.startsWith('♪')) toast.hidden = true;
+    }, 4500);
+  }, 2500);
+}
+
 export function initMusic() {
-  const first = () => {
-    gesture = true;
-    void ensure();
-  };
-  window.addEventListener('pointerdown', first, { once: true, capture: true });
-  window.addEventListener('keydown', first, { once: true, capture: true });
+  // pointerup/click/touchend/keydown are the events browsers accept as "a real tap"
+  for (const type of ['pointerup', 'click', 'touchend', 'keydown']) {
+    window.addEventListener(type, unlock, { capture: true, passive: true });
+  }
   onSettingsChange(sync);
-  // Save battery: silence the audio engine while the tab is hidden.
-  document.addEventListener('visibilitychange', () => engine?.suspend(document.visibilityState === 'hidden'));
+  // Save battery while the tab is hidden; come back to life when it returns.
+  document.addEventListener('visibilitychange', () => {
+    const hidden = document.visibilityState === 'hidden';
+    engine?.suspend(hidden);
+    if (!hidden) void audioCtx?.resume().catch(() => {});
+  });
+  hintIfSilent();
 }
 
 const live = () => (engine?.isRunning() ? engine : null);

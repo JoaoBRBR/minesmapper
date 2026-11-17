@@ -1,8 +1,10 @@
 // Per-device preferences, kept in localStorage (a convenience, not game state).
 
 export type NumberStyle = 'engraved' | 'handwritten' | 'colored';
-export type MusicStyle = 'dawn' | 'cloister' | 'deep';
-const MUSIC_STYLES: MusicStyle[] = ['dawn', 'cloister', 'deep'];
+export type MusicStyle = 'dawn' | 'rain' | 'jazz';
+const MUSIC_STYLES: MusicStyle[] = ['dawn', 'rain', 'jazz'];
+/** Names used by earlier versions. */
+const OLD_MUSIC_STYLES: Record<string, MusicStyle> = { cloister: 'jazz', deep: 'rain' };
 const NUMBER_STYLES: NumberStyle[] = ['engraved', 'handwritten', 'colored'];
 
 export interface Settings {
@@ -40,7 +42,9 @@ function load(): Settings {
           ? 'colored'
           : DEFAULTS.numberStyle,
       music: typeof raw.music === 'boolean' ? raw.music : DEFAULTS.music,
-      musicStyle: MUSIC_STYLES.includes(raw.musicStyle) ? raw.musicStyle : DEFAULTS.musicStyle,
+      musicStyle: MUSIC_STYLES.includes(raw.musicStyle)
+        ? raw.musicStyle
+        : (OLD_MUSIC_STYLES[raw.musicStyle] ?? DEFAULTS.musicStyle),
       musicVolume:
         typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
           ? raw.musicVolume

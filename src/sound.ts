@@ -127,6 +127,15 @@ export const sound = {
     if (!c) return;
     [784, 988, 1175, 1568].forEach((f, i) => tone(c, f, 0.22, { type: 'sine', vol: 0.14, at: i * 0.07 }));
   },
+  /** An ice clearer was used: a glassy sweep of tiny bells. */
+  ice() {
+    const c = ctx();
+    if (!c) return;
+    [1568, 1319, 1175, 988, 784, 659].forEach((f, i) =>
+      tone(c, f, 0.5, { type: 'sine', vol: 0.1, at: i * 0.06, to: f * 1.01 }),
+    );
+    noise(c, 0.5, { vol: 0.04, from: 6000, to: 12000, kind: 'highpass' });
+  },
   /** An oracle was spent. */
   oracle() {
     const c = ctx();

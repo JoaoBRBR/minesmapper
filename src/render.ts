@@ -80,6 +80,9 @@ let CLEAR: string[] = [];
 let PAPER: string[] = [];
 let REVIEW: string[] = [];
 let ICE: string[] = [];
+/** Engraved numbers are cut into the ground: a darker shade of the cell's own colour, with a pale lip. */
+let ENGRAVE_DARK: string[] = [];
+let ENGRAVE_LIGHT: string[] = [];
 let paperTexture: HTMLCanvasElement | null = null;
 let numberStyle: NumberStyle = 'engraved';
 /** Bumped whenever the look changes, so the game knows to redraw. */
@@ -96,6 +99,15 @@ export function setPaperTone(dark: boolean) {
   CLEAR = buildPalette((base, f) => blend(lit(base, f), paper, 0.1));
   // After the game ends, unexplored land is shown faded.
   REVIEW = buildPalette((base, f) => blend(lit(base, f), paper, 0.38));
+  const ground = (base: RGB, f: number) => blend(lit(base, f), paper, 0.1);
+  ENGRAVE_DARK = buildPalette((base, f) => {
+    const g = ground(base, f);
+    return [g[0] * 0.5, g[1] * 0.5, g[2] * 0.5];
+  });
+  ENGRAVE_LIGHT = buildPalette((base, f) => {
+    const g = ground(base, f);
+    return [Math.min(255, g[0] * 1.2 + 26), Math.min(255, g[1] * 1.2 + 26), Math.min(255, g[2] * 1.2 + 26)];
+  });
   // Unexplored ground is bare paper: nothing about the terrain leaks through.
   const flat = `rgb(${paper[0]},${paper[1]},${paper[2]})`;
   PAPER = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(flat);
@@ -242,7 +254,8 @@ export function draw(
     ctx.lineJoin = 'round';
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const b = data[(r * cols + c) * 3];
+        const k = (r * cols + c) * 3;
+        const b = data[k];
         const state = b & ST_MASK;
         if (isTidy(b)) continue;
         const sx = px(x0 + c);
@@ -269,10 +282,12 @@ export function draw(
               ctx.fillStyle = NUMBER_COLORS[n];
               ctx.fillText(String(n), mx, my + zoom * 0.04);
             } else if (numberStyle === 'engraved') {
-              // Letterpress: a pale edge under dark ink, perfectly upright like a printed map.
-              ctx.fillStyle = 'rgba(250, 240, 214, 0.75)';
-              ctx.fillText(String(n), mx + zoom * 0.025, my + zoom * 0.045);
-              ctx.fillStyle = INK;
+              // Engraved into the ground: the cell's own colour, darker, with a pale lip along the
+              // lower edge, perfectly upright like a stamped map.
+              const pi = paletteIndex(data[k + 1], data[k + 2]);
+              ctx.fillStyle = ENGRAVE_LIGHT[pi];
+              ctx.fillText(String(n), mx + zoom * 0.03, my + zoom * 0.055);
+              ctx.fillStyle = ENGRAVE_DARK[pi];
               ctx.fillText(String(n), mx, my + zoom * 0.02);
             } else {
               // Written by hand: a touch of tilt and wobble that is stable per cell.

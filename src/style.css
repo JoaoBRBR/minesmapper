@@ -891,3 +891,17 @@ input:not([type]) {
   gap: 10px;
   margin: 14px 0;
 }
+
+/* ---- Ice clearer power-up ---- */
+#iceclear,
+#m-ice {
+  background: linear-gradient(#e0f3ff, #a6d4f0);
+  border-color: #3b7ea8;
+  color: #12354a;
+}
+#iceclear[aria-pressed='true'] {
+  background: linear-gradient(#8fd0f5, #5fb4e6);
+  box-shadow:
+    0 0 0 3px rgba(120, 200, 245, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.25);
+}

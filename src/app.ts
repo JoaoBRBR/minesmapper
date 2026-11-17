@@ -12,11 +12,13 @@ import {
   initGame,
   isFlagMode,
   loadWorld,
+  iceClearersAvailable,
   oraclesAvailable,
   recenterView,
   setActive,
   setFlagMode,
   snapshot,
+  startIceTargeting,
   startOracleTargeting,
   thumbnail,
 } from './game';
@@ -447,6 +449,10 @@ function syncMenu() {
   const oracle = el<HTMLButtonElement>('m-oracle');
   oracle.hidden = oracles === 0;
   oracle.textContent = `✨ Use an oracle (×${oracles})`;
+  const clearers = iceClearersAvailable();
+  const iceBtn = el<HTMLButtonElement>('m-ice');
+  iceBtn.hidden = clearers === 0;
+  iceBtn.textContent = `❄ Use an ice clearer (×${clearers})`;
   const island = current?.config.mode === 'island';
   el('m-3d').hidden = !(island && snapshot().status === 'won');
 }
@@ -476,6 +482,10 @@ function bindGameMenu() {
       const s = snapshot();
       void openViewer({ ...current, status: s.status, elapsedMs: s.elapsedMs });
     }
+  });
+  el('m-ice').addEventListener('click', () => {
+    closePause();
+    startIceTargeting();
   });
   el('m-oracle').addEventListener('click', () => {
     closePause();

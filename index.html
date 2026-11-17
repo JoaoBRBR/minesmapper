@@ -28,6 +28,7 @@
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
+      <button id="iceclear" class="hud-extra" aria-pressed="false" hidden title="Make a whole stretch of water see-through (I)">❄ Ice clearer</button>
       <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <span class="chip hud-extra" id="pos">0, 0</span>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
@@ -70,6 +71,7 @@
         </div>
         <button id="m-center">⌖ Center on the start</button>
         <button id="m-oracle" hidden>✨ Oracle</button>
+        <button id="m-ice" hidden>❄ Ice clearer</button>
         <button id="m-3d" hidden>🌍 View the island in 3D</button>
         <div class="menu-toggles">
         <label class="switch">
@@ -92,8 +94,8 @@
           <b>Music style</b>
           <div class="seg" data-setting-choice="musicStyle" id="m-musicStyle">
             <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="cloister">Cloister</button>
-            <button type="button" data-v="deep">Deep</button>
+            <button type="button" data-v="rain">Rain</button>
+            <button type="button" data-v="jazz">Jazz</button>
           </div>
         </div>
         <div class="range-row">
@@ -153,10 +155,10 @@
           <b>Music style</b>
           <div class="seg" data-setting-choice="musicStyle" id="s-musicStyle">
             <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="cloister">Cloister</button>
-            <button type="button" data-v="deep">Deep</button>
+            <button type="button" data-v="rain">Rain</button>
+            <button type="button" data-v="jazz">Jazz</button>
           </div>
-          <small>Dawn: lo-fi · Cloister: classical · Deep: ambient water</small>
+          <small>Dawn: sunny lo-fi · Rain: late-night lo-fi · Jazz: smoky lo-fi jazz</small>
         </div>
         <div class="range-row">
           <b>Music volume</b>
