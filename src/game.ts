@@ -365,8 +365,12 @@ export function fmtTime(ms: number) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// The icon pass rewrites symbols in the DOM, so remember what was asked for instead of reading it back.
+const lastText = new WeakMap<HTMLElement, string>();
 function setText(node: HTMLElement, text: string) {
-  if (node.textContent !== text) node.textContent = text;
+  if (lastText.get(node) === text) return;
+  lastText.set(node, text);
+  node.textContent = text;
 }
 
 function updateBanner(now: number) {

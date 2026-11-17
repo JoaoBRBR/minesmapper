@@ -1050,3 +1050,15 @@ input:not([type]) {
   margin: 8px 0;
   text-align: left;
 }
+
+/* pictures that stand in for emoji inside text */
+.ic {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: -0.24em;
+  display: inline-block;
+  pointer-events: none;
+  user-select: none;
+}
+.ic.r1 { transform: rotate(90deg); }
+.ic.r3 { transform: rotate(-90deg); }
