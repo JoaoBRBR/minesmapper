@@ -6,6 +6,7 @@ import { sound } from './sound';
 import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
+import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
 export interface GameCallbacks {
@@ -15,6 +16,10 @@ export interface GameCallbacks {
   onRestart(): void;
   /** The player wants to see the island in 3D (win dialog button). */
   onView3D(): void;
+  /** The player finished an adventure level and wants the next one. */
+  onNextLevel(level: LevelDef): void;
+  /** An adventure result was recorded (stars may have changed). */
+  onLevelResult(): void;
 }
 
 export interface Snapshot {
@@ -56,6 +61,10 @@ const $fab = el<HTMLButtonElement>('fab');
 const $fabIcon = el('fab-ico');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
+const $bNext = el<HTMLButtonElement>('b-next');
+
+/** The adventure level being played, if any. */
+let level: LevelDef | undefined;
 
 let cb: GameCallbacks;
 let world: World | null = null;
@@ -142,6 +151,7 @@ export function loadWorld(
 ) {
   world?.free();
   cfg = config;
+  level = getLevel(config.level);
   wonRecord = false;
   world = makeWorld(config);
   if (state && !world.import_state(state)) {
@@ -165,11 +175,12 @@ export function loadWorld(
   setProgressView(false);
   glide = null;
   pointers.clear();
-  $timer.hidden = config.mode !== 'island';
+  $timer.hidden = config.mode !== 'island' && !level;
   const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? 14 : 32);
-  cam.cx = saved?.cx ?? HOME.x;
-  cam.cy = saved?.cy ?? HOME.y;
-  cam.zoom = saved?.zoom ?? defaultZoom;
+  const opening = level ? openingView(level) : null;
+  cam.cx = saved?.cx ?? opening?.x ?? HOME.x;
+  cam.cy = saved?.cy ?? opening?.y ?? HOME.y;
+  cam.zoom = saved?.zoom ?? opening?.zoom ?? defaultZoom;
   clampCamera();
   invalidate();
 }
@@ -345,7 +356,11 @@ function updateBanner(now: number) {
     bannerKey = key;
     bannerDismissed = false;
     if (key) cb.onChange(); // save the result right away
-    if (key === 'won') {
+    if (key === 'won' && level) {
+      const stars = starsFor(wd.mistakes());
+      $bannerTitle.textContent = `🧭 Level ${levelNumber(level)} complete!`;
+      $bannerSub.textContent = `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} · ${wd.mistakes() ? `${wd.mistakes()} mistake${wd.mistakes() > 1 ? 's' : ''}` : 'flawless'} · ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}`;
+    } else if (key === 'won') {
       $bannerTitle.textContent = '🏝 Island cleared!';
       $bannerSub.textContent = `Time ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}${wonRecord ? ' · 🏆 New best!' : ''}${wonStreak > 1 ? ` · 🔥 ${wonStreak}-day streak` : ''}`;
     } else if (key === 'lost') {
@@ -360,6 +375,7 @@ function updateBanner(now: number) {
   $banner.hidden = hide;
   // 3D view: a reward for clearing an island.
   $b3d.hidden = !(wd.is_island() && key === 'won');
+  $bNext.hidden = !(level && key === 'won' && nextLevel(level));
   $bProgress.hidden = key !== 'lost';
 }
 
@@ -371,7 +387,19 @@ function updateHud(now: number) {
   if (startedAt !== null && endedAt === null && finished) endedAt = clockNow(now);
 
   const tail = wd.is_won() ? ' · cleared!' : wd.is_game_over() ? ' · game over' : '';
-  if (island) {
+  if (level && level.goal.type !== 'clear-island') {
+    const gp = wd.goal_progress();
+    if (level.goal.type === 'clear-chunk') {
+      setText($score, `🎯 ${gp[0]} / ${gp[1]} in the area${wd.is_won() ? ' ✓' : wd.is_game_over() ? ' ✕' : ''}`);
+    } else {
+      const [tx, ty] = level.goal.target;
+      const dx = Math.round(tx + 0.5 - cam.cx);
+      const dy = Math.round(ty + 0.5 - cam.cy);
+      const dir = `${dy < 0 ? '↑' : dy > 0 ? '↓' : ''}${dx > 0 ? '→' : dx < 0 ? '←' : ''}`;
+      setText($score, wd.is_won() ? '🧭 Treasure found ✓' : `🧭 X is ${Math.max(Math.abs(dx), Math.abs(dy))} away ${dir}`);
+    }
+    setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? clockNow(now)) - startedAt));
+  } else if (island) {
     const total = wd.safe_total();
     const pct = total ? Math.floor((wd.score() / total) * 100) : 0;
     const left = wd.mines_total() - wd.flag_count();
@@ -459,6 +487,105 @@ const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 function render(now: number) {
   renderScene(now);
   if (settings.chunkBorders) drawChunkBorders(ctx, world!, cam, w, h);
+  if (level && !progressView) drawLevelMarks(level);
+}
+
+// --- Adventure markings: the goal area, the start area and the X ------------------------------
+
+const GOLD = '#d9a520';
+const toScreen = (x: number, y: number): [number, number] => [(x - cam.cx) * cam.zoom + w / 2, (y - cam.cy) * cam.zoom + h / 2];
+
+function drawLevelMarks(l: LevelDef) {
+  const wd = world!;
+  if (wd.is_won()) return;
+  const g = l.goal;
+  const start = startRect(l);
+  const fresh = wd.score() === 0;
+  ctx.save();
+  if (g.type === 'clear-chunk') {
+    const [x0, y0] = toScreen(g.chunk[0] * 16, g.chunk[1] * 16);
+    const side = 16 * cam.zoom;
+    ctx.fillStyle = 'rgba(217,165,32,0.10)';
+    if (fresh) ctx.fillRect(x0, y0, side, side);
+    glowRect(x0, y0, side, side, false);
+    if (fresh) label('Clear this area', x0 + side / 2, y0 - 10);
+  } else if (g.type === 'reach') {
+    if (start && fresh) {
+      const [x0, y0] = toScreen(start[0], start[1]);
+      const sw = (start[2] - start[0] + 1) * cam.zoom;
+      const sh = (start[3] - start[1] + 1) * cam.zoom;
+      ctx.fillStyle = 'rgba(217,165,32,0.10)';
+      ctx.fillRect(x0, y0, sw, sh);
+      glowRect(x0, y0, sw, sh, true);
+      label('Start here', x0 + sw / 2, y0 - 10);
+    }
+    drawTreasureX(g.target[0], g.target[1]);
+  }
+  ctx.restore();
+}
+
+function glowRect(x: number, y: number, rw: number, rh: number, dashed: boolean) {
+  ctx.setLineDash(dashed ? [10, 7] : []);
+  ctx.shadowColor = GOLD;
+  ctx.shadowBlur = 18;
+  ctx.strokeStyle = 'rgba(217,165,32,0.55)';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(x, y, rw, rh);
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = '#f4d35e';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(x, y, rw, rh);
+  ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
+}
+
+function label(text: string, x: number, y: number) {
+  ctx.font = '700 13px Kalam, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(30,20,5,0.85)';
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = '#f4d35e';
+  ctx.fillText(text, x, y);
+}
+
+/** A red X on the treasure cell; off screen, an arrow on the edge points the way. */
+function drawTreasureX(cx: number, cy: number) {
+  const [sx, sy] = toScreen(cx + 0.5, cy + 0.5);
+  const margin = 34;
+  const inView = sx > margin / 2 && sx < w - margin / 2 && sy > margin / 2 && sy < h - margin / 2;
+  if (!inView) {
+    const ax = Math.min(w - margin, Math.max(margin, sx));
+    const ay = Math.min(h - margin, Math.max(margin + 40, sy));
+    const ang = Math.atan2(sy - ay, sx - ax);
+    ctx.translate(ax, ay);
+    ctx.rotate(ang);
+    ctx.fillStyle = '#b3261e';
+    ctx.strokeStyle = '#f4ecd8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(16, 0);
+    ctx.lineTo(-10, -12);
+    ctx.lineTo(-4, 0);
+    ctx.lineTo(-10, 12);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    return;
+  }
+  const r = Math.max(9, cam.zoom * 0.42);
+  ctx.lineCap = 'round';
+  for (const [color, width] of [['#f4ecd8', r * 0.62], ['#b3261e', r * 0.36]] as const) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(sx - r, sy - r);
+    ctx.lineTo(sx + r, sy + r);
+    ctx.moveTo(sx + r, sy - r);
+    ctx.lineTo(sx - r, sy + r);
+    ctx.stroke();
+  }
 }
 
 function renderScene(now: number) {
@@ -517,7 +644,9 @@ function deny(x: number, y: number) {
   denied = { x, y, t0: performance.now() };
   toast(
     wd.score() === 0
-      ? 'Start near the center of the map'
+      ? level && startRect(level)
+        ? 'Make your first tap inside the marked area'
+        : 'Start near the center of the map'
       : `Too far: reveal within ${wd.reach()} cells of explored ground`,
   );
   sound.blocked();
@@ -718,10 +847,12 @@ function feedback(
     toast(`💥 A mine! ${wd.hearts_max() - wd.mistakes()} ♥ left`);
     if (animate) shake();
   } else if (!before.won && wd.is_won()) {
-    bump('wins');
+    if (!level) bump('wins');
     musicWin();
     const took = startedAt === null ? 0 : clockNow(now) - startedAt;
-    if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, took);
+    if (level) {
+      void recordResult(level.id, starsFor(wd.mistakes()), took).then(() => cb.onLevelResult());
+    } else if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, took);
     if (cfg?.daily) wonStreak = noteDailyWin(cfg.daily, took);
     sound.win();
     haptics.win();
@@ -773,7 +904,7 @@ function feedback(
     haptics.found();
   }
 
-  if (cfg?.mode === 'endless' && revealed > 0) noteEndless(cfg.difficulty, wd.points(), wd.farthest());
+  if (cfg?.mode === 'endless' && !level && revealed > 0) noteEndless(cfg.difficulty, wd.points(), wd.farthest());
 }
 
 // --- Pointer input: drag to pan, tap to reveal, long-press/right-click to flag, pinch to zoom.
@@ -999,6 +1130,7 @@ $iceBtn.addEventListener('click', toggleIceMode);
 const settled = (fn: () => void) => () => {
   if (performance.now() - bannerShownAt > 500) fn();
 };
+$bNext.addEventListener('click', settled(() => level && cb.onNextLevel(level)));
 el('b-restart').addEventListener('click', settled(() => cb.onRestart()));
 el('b-menu').addEventListener('click', settled(() => cb.onMenu()));
 $b3d.addEventListener('click', settled(() => cb.onView3D()));

@@ -58,6 +58,7 @@
       <div class="row">
         <button id="b-3d" class="primary" hidden>🌍 See it in 3D</button>
         <button id="b-progress" hidden>📊 View progress</button>
+        <button id="b-next" class="primary" hidden>Next level ▶</button>
         <button id="b-restart" class="primary">↻ Restart</button>
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
@@ -225,6 +226,7 @@
         </header>
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
+          <button id="h-adventure" class="primary">🗺 Adventure</button>
           <button id="h-new" class="primary">🧭 Free expedition</button>
           <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
           <button id="h-trophies">🏆 Finished islands</button>
@@ -239,6 +241,31 @@
         <div id="worlds"></div>
       </div>
     </main>
+
+    <!-- Adventure: the levels -->
+    <section id="adventure" class="screen" hidden>
+      <div class="panel">
+        <h1>Adventure</h1>
+        <p class="hint" id="adv-sum"></p>
+        <div id="levels"></div>
+        <div class="row actions">
+          <button id="adv-back" class="primary">← Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Level briefing -->
+    <div id="brief" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="brief-title"></div>
+        <div id="brief-body"></div>
+        <p class="hint" id="brief-goal"></p>
+        <div class="row">
+          <button id="brief-go" class="primary">Begin</button>
+          <button id="brief-cancel">Back</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Finished islands -->
     <section id="trophies" class="screen" hidden>

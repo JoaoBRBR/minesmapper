@@ -1,5 +1,6 @@
 import { World } from './wasm/pkg/minefield';
 import type { Difficulty, WorldConfig } from './storage';
+import { getLevel, startRect, type LevelDef } from './levels';
 
 export const DIFFICULTIES: Record<Exclude<Difficulty, 'custom'>, { density: number; maxDensity: number }> = {
   easy: { density: 0.12, maxDensity: 0.22 },
@@ -62,6 +63,14 @@ export function makeWorld(c: WorldConfig): World {
       ? World.new_island(c.seed, c.size, c.density, c.maxDensity, c.gen ?? 1)
       : new World(c.seed, c.density, c.maxDensity, ENDLESS_RAMP_LEN);
   if (c.hearts) w.set_hearts(c.hearts);
+  const level = getLevel(c.level);
+  if (level) {
+    const g = level.goal;
+    if (g.type === 'clear-chunk') w.set_goal_chunk(g.chunk[0], g.chunk[1]);
+    else if (g.type === 'reach') w.set_goal_reach(g.target[0], g.target[1]);
+    const r = startRect(level);
+    if (r) w.set_first_area(r[0], r[1], r[2], r[3]);
+  }
   return w;
 }
 
@@ -79,4 +88,20 @@ export function seedFromText(text: string): number {
     h = Math.imul(h, 0x01000193);
   }
   return h >>> 0;
+}
+
+/** The world config an adventure level plays on. */
+export function levelConfig(l: LevelDef): WorldConfig {
+  return {
+    mode: l.mode,
+    seed: l.seed,
+    seedText: l.title,
+    size: l.size ?? 0,
+    difficulty: 'custom',
+    density: l.density,
+    maxDensity: l.maxDensity,
+    gen: WORLD_GEN,
+    hearts: l.hearts,
+    level: l.id,
+  };
 }

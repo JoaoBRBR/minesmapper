@@ -28,6 +28,8 @@ export interface WorldConfig {
   daily?: string;
   /** Mistakes allowed before losing (absent or 0 = the first mine ends the game). */
   hearts?: number;
+  /** Set on adventure levels: the level's id (see levels.ts). */
+  level?: string;
 }
 
 export interface CamState {

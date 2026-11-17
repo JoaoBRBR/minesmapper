@@ -6,7 +6,7 @@ import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Sett
 import { sound } from './sound';
 import { bump, dailyStreak, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
-import { DIFFICULTIES, ISLAND_SIZES, SIZE_STEPS, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
+import { DIFFICULTIES, ISLAND_SIZES, levelConfig, SIZE_STEPS, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
 import {
   fmtTime,
   initGame,
@@ -24,6 +24,7 @@ import {
   thumbnail,
 } from './game';
 import { initMusic } from './musicBridge';
+import { LEVELS, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
@@ -43,11 +44,12 @@ import {
   type WorldMeta,
 } from './storage';
 
-type Screen = 'home' | 'creator' | 'stats' | 'trophies' | 'game';
+type Screen = 'home' | 'creator' | 'adventure' | 'stats' | 'trophies' | 'game';
 
 const el = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 const $homeScreen = el('home-screen');
 const $creator = el('creator');
+const $adventure = el('adventure');
 const $statsScreen = el('stats-screen');
 const $trophies = el('trophies');
 const $pause = el('pause');
@@ -65,6 +67,7 @@ function show(next: Screen) {
   screen = next;
   $homeScreen.hidden = next !== 'home';
   $creator.hidden = next !== 'creator';
+  $adventure.hidden = next !== 'adventure';
   $statsScreen.hidden = next !== 'stats';
   $trophies.hidden = next !== 'trophies';
   $pause.hidden = true;
@@ -87,7 +90,7 @@ function saveCurrent(withThumb = false): Promise<void> {
   clearTimeout(saveTimer);
   if (!current || screen !== 'game') return saveChain;
   const s = snapshot();
-  const isWin = s.status === 'won' && current.config.mode === 'island';
+  const isWin = s.status === 'won' && current.config.mode === 'island' && !current.config.level;
   const meta: WorldMeta = {
     ...current,
     status: s.status,
@@ -244,7 +247,8 @@ function worldCard(m: WorldMeta) {
 }
 
 async function renderHome() {
-  const worlds = await listWorlds();
+  const all = await listWorlds();
+  const worlds = all.filter((m) => !m.config.level); // adventure levels live on their own screen
   $worlds.replaceChildren(
     ...(worlds.length
       ? worlds.map(worldCard)
@@ -261,7 +265,7 @@ async function renderHome() {
         : `📅 Daily island · ${today.total ? Math.floor((today.cleared / today.total) * 100) : 0}%`;
   const cleared = (await listTrophies()).length;
   el('h-trophies').textContent = cleared ? `🏆 Finished islands (${cleared})` : '🏆 Finished islands';
-  const last = worlds.find((m) => m.status === 'playing');
+  const last = all.find((m) => m.status === 'playing');
   $continue.hidden = !last;
   if (last) {
     $continue.textContent = `▶ Continue "${last.name}"`;
@@ -522,6 +526,98 @@ async function openDaily() {
   await openWorld(id);
 }
 
+// --- Adventure ---------------------------------------------------------------------------
+
+const levelWorldId = (l: LevelDef) => `adv-${l.id}`;
+const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+async function openAdventure() {
+  if (screen === 'game') await saveCurrent(true);
+  current = null;
+  show('adventure');
+  await renderAdventure();
+}
+
+async function renderAdventure() {
+  const [progress, metas] = await Promise.all([loadProgress(), listWorlds()]);
+  const total = LEVELS.length * 3;
+  const got = LEVELS.reduce((n, l) => n + (progress[l.id]?.stars ?? 0), 0);
+  el('adv-sum').textContent = `${got} of ${total} stars`;
+  el('levels').replaceChildren(
+    ...LEVELS.map((l, i) => {
+      const open = isUnlocked(progress, i);
+      const res = progress[l.id];
+      const meta = metas.find((m) => m.id === levelWorldId(l));
+      const note = !open
+        ? '🔒 Finish the previous level'
+        : res
+          ? `${stars(res.stars)} · best ${fmtTime(res.bestMs)}`
+          : meta?.status === 'playing' && meta.cleared > 0
+            ? 'In progress'
+            : l.blurb;
+      const card = node(
+        'button',
+        { class: `level${open ? '' : ' locked'}`, disabled: !open, onclick: () => openBrief(l) },
+        node('span', { class: 'lv-num', textContent: String(i + 1) }),
+        node('span', { class: 'lv-text' }, node('b', { textContent: l.title }), node('small', { textContent: note })),
+      );
+      return card;
+    }),
+  );
+}
+
+function goalLine(l: LevelDef) {
+  const g = l.goal;
+  const hearts = `${l.hearts} ♥ · three stars for no mistakes`;
+  if (g.type === 'clear-chunk') return `Goal: clear the glowing area · ${hearts}`;
+  if (g.type === 'reach') return `Goal: reveal the X · ${hearts}`;
+  return `Goal: clear every safe square · ${hearts}`;
+}
+
+async function openBrief(l: LevelDef) {
+  const meta = await getWorld(levelWorldId(l));
+  el('brief-title').textContent = `Level ${levelNumber(l)} · ${l.title}`;
+  el('brief-body').replaceChildren(...l.intro.map((t) => node('p', { textContent: t })));
+  el('brief-goal').textContent = goalLine(l);
+  const go = el<HTMLButtonElement>('brief-go');
+  go.textContent = meta?.status === 'playing' && meta.cleared > 0 ? '▶ Continue' : meta ? '↻ Play again' : 'Begin';
+  go.onclick = () => void startLevel(l);
+  el('brief').hidden = false;
+}
+
+function closeBrief() {
+  el('brief').hidden = true;
+}
+
+async function startLevel(l: LevelDef) {
+  closeBrief();
+  const id = levelWorldId(l);
+  const meta = await getWorld(id);
+  if (meta && meta.status === 'playing') return openWorld(id);
+  if (meta) return restartWorld(id);
+  const now = Date.now();
+  await saveWorld(
+    {
+      id,
+      name: `Level ${levelNumber(l)} · ${l.title}`,
+      config: levelConfig(l),
+      status: 'playing',
+      cleared: 0,
+      total: 0,
+      points: 0,
+      farthest: 0,
+      elapsedMs: 0,
+      cam: null,
+      thumb: null,
+      worldgen: WORLDGEN_VERSION,
+      createdAt: now,
+      updatedAt: now,
+    },
+    new Int32Array(0),
+  );
+  await openWorld(id);
+}
+
 // --- Pause menu -------------------------------------------------------------------------
 
 /** Fills the menu with the current state each time it opens. */
@@ -586,7 +682,7 @@ function bindGameMenu() {
   });
   el('p-resume').addEventListener('click', closePause);
   el('p-restart').addEventListener('click', () => void restartCurrent());
-  el('p-exit').addEventListener('click', () => void goHome());
+  el('p-exit').addEventListener('click', () => void (current?.config.level ? openAdventure() : goHome()));
   $pause.addEventListener('click', (e) => {
     if (e.target === $pause) closePause();
   });
@@ -881,6 +977,11 @@ export async function start() {
     onChange: scheduleSave,
     onMenu: openPause,
     onRestart: () => void restartCurrent(),
+    onNextLevel: (l) => {
+      const next = nextLevel(l);
+      if (next) void saveCurrent(true).then(() => openBrief(next));
+    },
+    onLevelResult: () => void 0,
     onView3D: () => {
       if (!current) return;
       const s = snapshot();
@@ -899,6 +1000,9 @@ export async function start() {
 
   el('h-new').addEventListener('click', () => void openCreator());
   el('h-daily').addEventListener('click', () => void openDaily());
+  el('h-adventure').addEventListener('click', () => void openAdventure());
+  el('adv-back').addEventListener('click', () => void goHome());
+  el('brief-cancel').addEventListener('click', closeBrief);
   el('h-stats').addEventListener('click', () => void openStats());
   el('stats-back').addEventListener('click', () => void goHome());
   el('stats-reset').addEventListener('click', async () => {
