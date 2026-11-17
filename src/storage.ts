@@ -26,6 +26,8 @@ export interface WorldConfig {
   gen?: number;
   /** Set on the daily island: the (UTC) date it belongs to, e.g. 2026-11-17. */
   daily?: string;
+  /** Mistakes allowed before losing (absent or 0 = the first mine ends the game). */
+  hearts?: number;
 }
 
 export interface CamState {

@@ -25,6 +25,7 @@
 
     <div id="hud" hidden>
       <span class="chip" id="score">0 cleared</span>
+      <span class="chip" id="hearts" hidden aria-label="Hearts left"></span>
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
@@ -224,7 +225,7 @@
         </header>
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
-          <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-new" class="primary">🧭 Free expedition</button>
           <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
           <button id="h-trophies">🏆 Finished islands</button>
           <button id="h-stats">📊 Stats</button>
@@ -291,7 +292,7 @@
     <section id="creator" class="screen" hidden>
       <div class="panel creator-grid">
         <div class="form">
-          <h1>New world</h1>
+          <h1>Free expedition</h1>
 
           <label class="field">
             <span>Name</span>
@@ -309,11 +310,10 @@
 
           <fieldset id="c-size-wrap">
             <legend>Island size</legend>
-            <div class="seg" id="c-size">
-              <button type="button" data-v="96">Small</button>
-              <button type="button" data-v="192">Medium</button>
-              <button type="button" data-v="320">Large</button>
-            </div>
+            <label class="slider">
+              <span>Size <b id="c-size-val"></b></span>
+              <input type="range" id="c-size" min="0" max="4" step="1" />
+            </label>
           </fieldset>
 
           <div class="field">
@@ -342,6 +342,15 @@
               <input type="range" id="c-d1" min="5" max="45" />
             </label>
           </fieldset>
+
+          <details class="advanced" id="c-advanced">
+            <summary>Advanced options</summary>
+            <label class="slider">
+              <span>Hearts (mistakes you can survive) <b id="c-hearts-val"></b></span>
+              <input type="range" id="c-hearts" min="0" max="9" step="1" />
+            </label>
+            <p class="hint">With hearts, stepping on a mine costs one heart instead of ending the game. Off by default.</p>
+          </details>
         </div>
 
         <div class="side">

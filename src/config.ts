@@ -10,7 +10,26 @@ export const DIFFICULTIES: Record<Exclude<Difficulty, 'custom'>, { density: numb
 /** What new worlds are generated with (see WorldConfig.gen). */
 export const WORLD_GEN = 2;
 
-export const ISLAND_SIZES = { small: 96, medium: 192, large: 320 } as const;
+/** The five island sizes, smallest first (side length in cells). */
+export const ISLAND_SIZES = { tiny: 48, small: 96, medium: 192, large: 320, huge: 448 } as const;
+export const SIZE_STEPS = Object.entries(ISLAND_SIZES).map(([name, size]) => ({ name, size }));
+
+/** Daily islands are mostly small; medium and large turn up now and then, huge never. */
+const DAILY_SIZE_WEIGHTS = [
+  [ISLAND_SIZES.tiny, 35],
+  [ISLAND_SIZES.small, 40],
+  [ISLAND_SIZES.medium, 17],
+  [ISLAND_SIZES.large, 8],
+] as const;
+
+function dailySize(seed: number): number {
+  let roll = (seed % 100) as number;
+  for (const [size, weight] of DAILY_SIZE_WEIGHTS) {
+    if (roll < weight) return size;
+    roll -= weight;
+  }
+  return ISLAND_SIZES.small;
+}
 
 /** Today's date in UTC, e.g. 2026-11-17: the daily island is the same for everyone on that day. */
 export const todayKey = (d = new Date()) => d.toISOString().slice(0, 10);
@@ -20,11 +39,12 @@ export const todayKey = (d = new Date()) => d.toISOString().slice(0, 10);
  * everyone's time is comparable.
  */
 export function dailyConfig(key = todayKey()): WorldConfig {
+  const seed = seedFromText(`mines-mappers-daily-${key}`);
   return {
     mode: 'island',
-    seed: seedFromText(`mines-mappers-daily-${key}`),
+    seed,
     seedText: `Daily ${key}`,
-    size: ISLAND_SIZES.medium,
+    size: dailySize(seedFromText(`mines-mappers-daily-size-${key}`)),
     difficulty: 'normal',
     density: DIFFICULTIES.normal.density,
     maxDensity: DIFFICULTIES.normal.maxDensity,
@@ -37,9 +57,12 @@ export function dailyConfig(key = todayKey()): WorldConfig {
 const ENDLESS_RAMP_LEN = 300;
 
 export function makeWorld(c: WorldConfig): World {
-  return c.mode === 'island'
-    ? World.new_island(c.seed, c.size, c.density, c.maxDensity, c.gen ?? 1)
-    : new World(c.seed, c.density, c.maxDensity, ENDLESS_RAMP_LEN);
+  const w =
+    c.mode === 'island'
+      ? World.new_island(c.seed, c.size, c.density, c.maxDensity, c.gen ?? 1)
+      : new World(c.seed, c.density, c.maxDensity, ENDLESS_RAMP_LEN);
+  if (c.hearts) w.set_hearts(c.hearts);
+  return w;
 }
 
 export function randomSeed(): number {

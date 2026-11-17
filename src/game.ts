@@ -36,6 +36,7 @@ const el = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${
 const canvas = el<HTMLCanvasElement>('map');
 const ctx = canvas.getContext('2d')!;
 const $hud = el('hud');
+const $hearts = el('hearts');
 const $score = el('score');
 const $timer = el('timer');
 const $pos = el('pos');
@@ -389,6 +390,12 @@ function updateHud(now: number) {
         : `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()} away · 🚩 ${wd.flag_count()}${tail}`,
     );
   }
+  const heartsMax = wd.hearts_max();
+  $hearts.hidden = heartsMax === 0;
+  if (heartsMax) {
+    const left = Math.max(0, heartsMax - wd.mistakes());
+    setText($hearts, '♥'.repeat(left) + '♡'.repeat(heartsMax - left));
+  }
   const oracles = wd.powerups_available();
   if (oracles === 0 && oracleMode) oracleMode = false;
   const clearers = wd.iceclearers_available();
@@ -561,6 +568,7 @@ function activate(px: number, py: number, forceFlag: boolean) {
     won: wd.is_won(),
     found: wd.powerups_found(),
     iceFound: wd.iceclearers_found(),
+    mistakes: wd.mistakes(),
   };
   if (iceMode && !forceFlag) {
     useIceClearer(x, y);
@@ -586,7 +594,7 @@ function activate(px: number, py: number, forceFlag: boolean) {
   cb.onChange();
 }
 
-type Before = { score: number; flags: number; over: boolean; won: boolean; found: number; iceFound: number };
+type Before = { score: number; flags: number; over: boolean; won: boolean; found: number; iceFound: number; mistakes: number };
 
 function toggleOracleMode() {
   const wd = world;
@@ -704,6 +712,11 @@ function feedback(
       endFx = { kind: 'lost', t0: now, origin: [x, y] };
       shake();
     }
+  } else if (!before.over && wd.mistakes() > before.mistakes) {
+    sound.boom();
+    haptics.boom();
+    toast(`💥 A mine! ${wd.hearts_max() - wd.mistakes()} ♥ left`);
+    if (animate) shake();
   } else if (!before.won && wd.is_won()) {
     bump('wins');
     musicWin();

@@ -6,7 +6,7 @@ import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Sett
 import { sound } from './sound';
 import { bump, dailyStreak, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
-import { DIFFICULTIES, ISLAND_SIZES, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
+import { DIFFICULTIES, ISLAND_SIZES, SIZE_STEPS, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
 import {
   fmtTime,
   initGame,
@@ -636,7 +636,14 @@ const modeSeg = segmented('c-mode', () => {
   syncCreatorVisibility();
   refreshPreview();
 });
-const sizeSeg = segmented('c-size', () => refreshPreview());
+const $size = el<HTMLInputElement>('c-size');
+const $hearts = el<HTMLInputElement>('c-hearts');
+const sizeStep = () => SIZE_STEPS[Number($size.value)];
+function syncSizeLabels() {
+  const s = sizeStep();
+  el('c-size-val').textContent = `${s.name[0].toUpperCase()}${s.name.slice(1)} · ${s.size}×${s.size}`;
+  el('c-hearts-val').textContent = Number($hearts.value) ? `${$hearts.value} ♥` : 'off';
+}
 const diffSeg = segmented('c-diff', (v) => {
   if (v !== 'custom') applyPreset(v as Exclude<Difficulty, 'custom'>);
   refreshPreview();
@@ -668,11 +675,12 @@ function readConfig(): WorldConfig {
     mode: modeSeg.get() as Mode,
     seed: seedFromText(text),
     seedText: text,
-    size: Number(sizeSeg.get()),
+    size: sizeStep().size,
     difficulty: diffSeg.get() as Difficulty,
     density: Number($d0.value) / 100,
     maxDensity: Number($d1.value) / 100,
     gen: WORLD_GEN,
+    ...(Number($hearts.value) ? { hearts: Number($hearts.value) } : {}),
   };
 }
 
@@ -705,7 +713,10 @@ function drawPreview() {
 async function openCreator() {
   const n = (await listWorlds()).length + 1;
   modeSeg.set('island');
-  sizeSeg.set(String(ISLAND_SIZES.medium));
+  $size.value = String(SIZE_STEPS.findIndex((s) => s.size === ISLAND_SIZES.medium));
+  $hearts.value = '0';
+  el<HTMLDetailsElement>('c-advanced').open = false;
+  syncSizeLabels();
   diffSeg.set('normal');
   applyPreset('normal');
   $seed.value = String(randomSeed());
@@ -724,6 +735,11 @@ function bindCreator() {
       $name.value = `${modeSeg.get() === 'island' ? 'Island' : 'Endless'} ${n}`;
     }
   });
+  for (const r of [$size, $hearts])
+    r.addEventListener('input', () => {
+      syncSizeLabels();
+      refreshPreview();
+    });
   $seed.addEventListener('input', refreshPreview);
   el('c-dice').addEventListener('click', () => {
     $seed.value = String(randomSeed());

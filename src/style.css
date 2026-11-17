@@ -994,3 +994,21 @@ input:not([type]) {
     display: grid;
   }
 }
+
+.advanced {
+  display: grid;
+  gap: 8px;
+  border: 1px dashed var(--ink-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.advanced[open] summary {
+  margin-bottom: 6px;
+}
+#hearts {
+  letter-spacing: 2px;
+}
