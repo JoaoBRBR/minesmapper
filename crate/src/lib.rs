@@ -14,7 +14,7 @@ use noise::hash;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
-use terrain::{Terrain, CH};
+use terrain::{Terrain, B_OCEAN, CH};
 use wasm_bindgen::prelude::*;
 
 /// Terrain chunks kept in memory before the cache is flushed.
@@ -71,6 +71,14 @@ fn powerup_rate(density: f32) -> f64 {
 /// and mines inside it (away from unfinished ground) are tidied away.
 const CLEAN_CHUNK: i32 = 16;
 
+/// Water "ice": revealing a water cell turns the water in the surrounding sections
+/// (this many cells on a side, plus the 8 neighbouring sections) see-through.
+const ICE_CHUNK: i32 = 8;
+
+fn ice_key(x: i32, y: i32) -> (i32, i32) {
+    (x.div_euclid(ICE_CHUNK), y.div_euclid(ICE_CHUNK))
+}
+
 fn clean_key(x: i32, y: i32) -> (i32, i32) {
     (x.div_euclid(CLEAN_CHUNK), y.div_euclid(CLEAN_CHUNK))
 }
@@ -86,6 +94,10 @@ const MAX_FLOOD: usize = 100_000;
 pub const ST_HIDDEN: u8 = 0x00;
 pub const ST_FLAG: u8 = 0x10;
 pub const ST_REVEALED: u8 = 0x20;
+/// Hidden or flagged water cell that is under see-through ice (bit 6) ...
+pub const ST_ICE: u8 = 0x40;
+/// ... and a mine can be made out beneath it (bit 7). Only set together with `ST_ICE`.
+pub const ST_ICE_MINE: u8 = 0x80;
 /// Set on a cell inside a tidied-up area: draw it as plain cleared ground (bit 7).
 pub const ST_CLEAN: u8 = 0x80;
 /// Set on a revealed cell that held a power-up (bit 6, outside the state/count bits).
@@ -127,6 +139,9 @@ pub struct World {
     clean_chunks: HashSet<(i32, i32)>,
     /// Chunks that became clean since the last `take_clean_log` (`cx, cy` pairs).
     clean_log: Vec<i32>,
+    /// Ice sections that contain a revealed water cell, and those plus their neighbours.
+    ice_seeded: HashSet<(i32, i32)>,
+    ice_chunks: HashSet<(i32, i32)>,
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
@@ -161,6 +176,8 @@ impl World {
             chunk_stats: HashMap::new(),
             clean_chunks: HashSet::new(),
             clean_log: Vec::new(),
+            ice_seeded: HashSet::new(),
+            ice_chunks: HashSet::new(),
             island: None,
             mines_total: 0,
         }
@@ -196,6 +213,11 @@ impl World {
     /// Playable land cells (0 in endless mode).
     pub fn land_total(&self) -> u32 {
         self.island.as_ref().map_or(0, |i| i.land_count)
+    }
+
+    /// Playable cells that are inner-lake water (0 in endless mode).
+    pub fn lake_total(&self) -> u32 {
+        self.island.as_ref().map_or(0, |i| i.lake_count)
     }
 
     pub fn mines_total(&self) -> u32 {
@@ -364,6 +386,11 @@ impl World {
         self.chunk_stats.clear();
         self.clean_chunks.clear();
         self.clean_log.clear();
+        self.ice_seeded.clear();
+        self.ice_chunks.clear();
+        for &(x, y) in &revealed {
+            self.note_water(x, y);
+        }
         let mut per_chunk: HashMap<(i32, i32), u16> = HashMap::new();
         for &(x, y) in &revealed {
             *per_chunk.entry(clean_key(x, y)).or_insert(0) += 1;
@@ -394,6 +421,55 @@ impl World {
             }
         }
         n
+    }
+
+    /// Terrain at this cell is water (ocean or deep ocean).
+    fn is_water(&self, x: i32, y: i32) -> bool {
+        let chunk = self.chunk(x.div_euclid(CH), y.div_euclid(CH));
+        chunk[((y.rem_euclid(CH) * CH + x.rem_euclid(CH)) * 2) as usize] <= B_OCEAN
+    }
+
+    /// A revealed water cell melts the ice around it: its section and the 8 around it.
+    fn note_water(&mut self, x: i32, y: i32) {
+        if !self.is_water(x, y) {
+            return;
+        }
+        let k = ice_key(x, y);
+        if self.ice_seeded.insert(k) {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    self.ice_chunks.insert((k.0 + dx, k.1 + dy));
+                }
+            }
+        }
+    }
+
+    /// Bits describing a hidden/flagged cell's ice state (see `ST_ICE`).
+    fn ice_bits(&self, x: i32, y: i32, biome: u8) -> u8 {
+        if biome <= B_OCEAN && self.ice_chunks.contains(&ice_key(x, y)) {
+            ST_ICE | if self.is_mine(x, y) { ST_ICE_MINE } else { 0 }
+        } else {
+            0
+        }
+    }
+
+    /// The number shown on a revealed cell. Mines hidden inside tidied-up ground are left
+    /// out, so the number only counts mines the player can still see or has yet to find.
+    fn display_count(&self, x: i32, y: i32) -> u8 {
+        let n = self.adjacent(x, y);
+        if n == 0 || self.game_over || self.clean_chunks.is_empty() {
+            return n;
+        }
+        let mut hidden = 0;
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let (nx, ny) = (x + dx, y + dy);
+                if (dx != 0 || dy != 0) && self.is_settled(nx, ny) && self.is_mine(nx, ny) {
+                    hidden += 1;
+                }
+            }
+        }
+        n - hidden
     }
 
     /// Counts a newly revealed safe cell towards its chunk, marking the chunk
@@ -614,6 +690,7 @@ impl World {
                 self.powerups_found += 1;
             }
             self.note_revealed(cx, cy);
+            self.note_water(cx, cy);
             if self.reveal_log.len() < MAX_LOG * 3 {
                 self.reveal_log.extend([cx, cy, depth]);
             }
@@ -658,7 +735,7 @@ impl World {
     /// Chording: on a revealed number whose flags match its count, reveal the
     /// remaining neighbours. Returns cells newly revealed.
     pub fn chord(&mut self, x: i32, y: i32) -> u32 {
-        if self.game_over || self.won || !self.revealed.contains(&(x, y)) {
+        if self.game_over || self.won || !self.revealed.contains(&(x, y)) || self.is_settled(x, y) {
             return 0;
         }
         let n = self.adjacent(x, y);
@@ -705,29 +782,32 @@ impl World {
                 }
                 // On a loss everything is shown, including mines in tidied-up areas.
                 let settled = !self.game_over && last_clean.2 && self.is_settled(x, y);
-                let state = if self.exploded.contains(&p) {
-                    ST_MINE | 1
-                } else if settled {
-                    ST_CLEAN | ST_REVEALED
-                } else if self.revealed.contains(&p) {
-                    ST_REVEALED | self.adjacent(x, y) | if self.is_powerup(x, y) { ST_POWERUP } else { 0 }
-                } else if self.game_over && self.is_mine(x, y) {
-                    ST_MINE
-                } else if self.flagged.contains(&p) {
-                    ST_FLAG
-                } else if self.island.is_some() && !self.is_playable(x, y) {
-                    ST_VOID
-                } else {
-                    ST_HIDDEN
-                };
                 let key = (x.div_euclid(CH), y.div_euclid(CH));
                 if key != last_key {
                     chunk = self.chunk(key.0, key.1);
                     last_key = key;
                 }
                 let i = ((y.rem_euclid(CH) * CH + x.rem_euclid(CH)) * 2) as usize;
+                let biome = chunk[i];
+                let state = if self.exploded.contains(&p) {
+                    ST_MINE | 1
+                } else if settled {
+                    ST_CLEAN | ST_REVEALED
+                } else if self.revealed.contains(&p) {
+                    ST_REVEALED
+                        | self.display_count(x, y)
+                        | if self.is_powerup(x, y) { ST_POWERUP } else { 0 }
+                } else if self.game_over && self.is_mine(x, y) {
+                    ST_MINE
+                } else if self.flagged.contains(&p) {
+                    ST_FLAG | self.ice_bits(x, y, biome)
+                } else if self.island.is_some() && !self.is_playable(x, y) {
+                    ST_VOID
+                } else {
+                    ST_HIDDEN | self.ice_bits(x, y, biome)
+                };
                 out.push(state);
-                out.push(chunk[i]);
+                out.push(biome);
                 out.push(chunk[i + 1]);
             }
         }
@@ -1260,5 +1340,78 @@ mod tests {
             w.chord(mine.0 + dx, mine.1 + dy);
         }
         assert!(!w.is_game_over());
+    }
+
+    #[test]
+    fn revealing_water_melts_the_ice_around_it() {
+        // An endless world whose start cell is water.
+        let seed = (0..400u32)
+            .find(|&sd| {
+                let w = World::new(sd, 0.15, 0.15, 0.0);
+                w.is_water(0, 0) && w.is_water(3, 3)
+            })
+            .expect("a seed that starts in water");
+        let mut w = World::new(seed, 0.15, 0.15, 0.0);
+        // Before anything is revealed there is no ice anywhere.
+        assert!(w.view(-20, -20, 40, 40).chunks(3).all(|c| c[0] & 0xC0 == 0));
+        w.reveal(0, 0);
+        let v = w.view(-30, -30, 60, 60);
+        let mut ice = 0;
+        for (i, c) in v.chunks(3).enumerate() {
+            let (x, y) = (-30 + (i % 60) as i32, -30 + (i / 60) as i32);
+            let hidden = c[0] & 0x30 == 0 || c[0] & 0x30 == ST_FLAG;
+            if hidden && c[0] & ST_ICE != 0 {
+                ice += 1;
+                assert!(c[1] <= B_OCEAN, "ice on land at ({x},{y})");
+                assert_eq!(c[0] & ST_ICE_MINE != 0, w.is_mine(x, y), "mine hint wrong at ({x},{y})");
+            } else if hidden {
+                assert_eq!(c[0] & ST_ICE_MINE, 0);
+            }
+        }
+        assert!(ice > 20, "expected an icy area around the opened water, got {ice} cells");
+        // Water far from anything revealed is still unreached.
+        let far = w.view(300, 300, 40, 40);
+        assert!(far.chunks(3).all(|c| c[0] & 0xC0 == 0));
+    }
+
+    #[test]
+    fn numbers_next_to_tidied_ground_ignore_the_hidden_mines() {
+        let mut w = World::new(12, 0.2, 0.2, 0.0);
+        w.reveal(0, 0);
+        clear_area(&mut w, -16, -16, 32, 32);
+        let (mut checked, mut reduced) = (0, 0);
+        for y in -16..32 {
+            for x in -16..32 {
+                if !w.revealed.contains(&(x, y)) || w.is_settled(x, y) {
+                    continue;
+                }
+                let hidden = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+                    .filter(|&(dx, dy)| (dx, dy) != (0, 0) && w.is_settled(x + dx, y + dy) && w.is_mine(x + dx, y + dy))
+                    .count() as u8;
+                let shown = w.view(x, y, 1, 1)[0] & 0x0f;
+                assert_eq!(shown, w.adjacent(x, y) - hidden, "({x},{y})");
+                checked += 1;
+                reduced += (hidden > 0) as u32;
+            }
+        }
+        assert!(checked > 50 && reduced > 5, "checked {checked}, reduced {reduced}");
+        // After a loss the real numbers come back.
+        w.exploded.insert((40, 40));
+        w.game_over = true;
+        for y in -16..32 {
+            for x in -16..32 {
+                if w.revealed.contains(&(x, y)) {
+                    assert_eq!(w.view(x, y, 1, 1)[0] & 0x0f, w.adjacent(x, y));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_won_island_with_lakes_counts_lake_cells_as_cells_to_clear() {
+        let w = World::new_island(5, 192, 0.12, 0.2);
+        // Safe cells to clear include any lake cells (they are playable).
+        assert_eq!(w.safe_total(), w.land_total() - w.mines_total());
     }
 }

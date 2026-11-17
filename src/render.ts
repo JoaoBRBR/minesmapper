@@ -18,10 +18,16 @@ const ST_REVEALED = 0x20;
 const ST_MINE = 0x30;
 /** Hidden + low nibble 0xF: unplayable water around the island. */
 const ST_VOID = 0x0f;
-/** Bit 7: cell is inside a tidied-up area - plain ground, no glyphs or grid. */
+/** Revealed cells: bit 7 = inside a tidied-up area (plain ground, no glyphs or grid)... */
 const ST_CLEAN = 0x80;
-/** Bit 6 on a revealed cell: it held a power-up. */
+/** ...and bit 6 = it held a power-up. */
 const ST_POWERUP = 0x40;
+/** Hidden/flagged water cells: bit 6 = under see-through ice... */
+const ST_ICE = 0x40;
+/** ...and bit 7 (with ST_ICE) = a mine can be made out beneath it. */
+const ST_ICE_MINE = 0x80;
+/** A revealed, tidied-up cell: state bits say "revealed" and bit 7 is set. */
+const isTidy = (b: number) => (b & (ST_MASK | ST_CLEAN)) === (ST_REVEALED | ST_CLEAN);
 
 type RGB = [number, number, number];
 
@@ -42,31 +48,69 @@ const BIOME_COLORS: RGB[] = [
   [128, 124, 118], // rock
   [240, 244, 248], // snow
 ];
-// Unexplored land fades towards this near-black blue.
-const FOG: RGB = [10, 16, 26];
 const SHADE_LEVELS = 32;
 
-function buildPalette(fog: number): string[] {
+/** Old-paper tones. Unexplored ground is bare paper; revealed ground is an ink wash on it. */
+const TONES = {
+  light: { paper: [233, 217, 172] as RGB, grid: 'rgba(98, 70, 38, 0.24)' },
+  dark: { paper: [62, 52, 42] as RGB, grid: 'rgba(236, 216, 176, 0.11)' },
+};
+type ToneName = keyof typeof TONES;
+let toneName: ToneName = 'light';
+
+const mixc = (a: number, b: number, t: number) => a + (b - a) * t;
+const shadeFactor = (level: number) => 0.62 + 0.76 * ((level + 0.5) / SHADE_LEVELS);
+
+function buildPalette(colour: (base: RGB, f: number) => RGB): string[] {
   const out: string[] = [];
   for (const base of BIOME_COLORS) {
     for (let l = 0; l < SHADE_LEVELS; l++) {
-      // shade 128 (level 16) is neutral; map to a brightness factor.
-      const f = 0.62 + 0.76 * ((l + 0.5) / SHADE_LEVELS);
-      const c = [0, 1, 2].map((k) => {
-        const lit = Math.min(255, base[k] * f);
-        return Math.round(lit + (FOG[k] - lit) * fog);
-      });
-      out.push(`rgb(${c[0]},${c[1]},${c[2]})`);
+      const c = colour(base, shadeFactor(l));
+      out.push(`rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`);
     }
   }
   return out;
 }
 
-// Revealed land is vivid; unexplored land is buried in darkness.
-const CLEAR = buildPalette(0);
-const FOGGED = buildPalette(0.78);
-// After the game ends the whole map is shown, with unexplored land only slightly dimmed.
-const REVIEW = buildPalette(0.3);
+const lit = (base: RGB, f: number): RGB => [Math.min(255, base[0] * f), Math.min(255, base[1] * f), Math.min(255, base[2] * f)];
+const blend = (a: RGB, b: RGB, t: number): RGB => [mixc(a[0], b[0], t), mixc(a[1], b[1], t), mixc(a[2], b[2], t)];
+
+let CLEAR: string[] = [];
+let PAPER: string[] = [];
+let REVIEW: string[] = [];
+let ICE: string[] = [];
+let paperTexture: HTMLCanvasElement | null = null;
+let coloredNumbers = false;
+/** Bumped whenever the look changes, so the game knows to redraw. */
+export let visualsVersion = 0;
+export const bumpVisuals = () => void visualsVersion++;
+
+/** Picks the paper tone (light parchment or dark) and rebuilds the colour tables. */
+export function setPaperTone(dark: boolean) {
+  const next: ToneName = dark ? 'dark' : 'light';
+  if (next === toneName && CLEAR.length) return;
+  toneName = next;
+  const paper = TONES[toneName].paper;
+  // Revealed land: vivid, but washed into the paper a little so it feels printed on it.
+  CLEAR = buildPalette((base, f) => blend(lit(base, f), paper, 0.1));
+  // After the game ends, unexplored land is shown faded.
+  REVIEW = buildPalette((base, f) => blend(lit(base, f), paper, 0.38));
+  // Unexplored ground is bare paper: nothing about the terrain leaks through.
+  const flat = `rgb(${paper[0]},${paper[1]},${paper[2]})`;
+  PAPER = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(flat);
+  // Ice: water you can faintly see through, a pale blue glaze over the paper.
+  ICE = buildPalette((base, f) => blend(blend(lit(base, f), [196, 226, 242], 0.45), paper, 0.35));
+  paperTexture = null;
+  bumpVisuals();
+}
+setPaperTone(false);
+
+/** Ink-written numbers (default) or the classic coloured ones. */
+export function setNumberStyle(colored: boolean) {
+  if (colored === coloredNumbers) return;
+  coloredNumbers = colored;
+  bumpVisuals();
+}
 
 /**
  * play    - fog of war: only revealed cells show their colours.
@@ -77,13 +121,17 @@ export type ViewMode = 'play' | 'review' | 'preview';
 
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
-  if (b === ST_VOID) return view === 'review' ? CLEAR : FOGGED;
-  if ((b & ST_MASK) === ST_REVEALED) return CLEAR;
-  return view === 'review' ? REVIEW : FOGGED;
+  if (b === ST_VOID) return view === 'review' ? CLEAR : PAPER;
+  const state = b & ST_MASK;
+  if (state === ST_REVEALED) return CLEAR;
+  if (view === 'play' && (state === 0 || state === ST_FLAG) && b & ST_ICE) return ICE;
+  return view === 'review' ? REVIEW : PAPER;
 }
 const paletteIndex = (biome: number, shade: number) => biome * SHADE_LEVELS + (shade >> 3);
 
 const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12', '#0e7490', '#111827', '#525252'];
+const INK = '#2a1b0e';
+const HAND_FONT = 'Kalam, "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
 
 /** Cell reveal ripple (parallel arrays; `t0` is the start time of each cell's pop, in ms). */
 export interface Ripple {
@@ -144,7 +192,7 @@ export function draw(
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 3;
       hasVoid ||= data[i] === ST_VOID;
-      hasTidy ||= (data[i] & ST_CLEAN) !== 0;
+      hasTidy ||= isTidy(data[i]);
       ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
       ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
     }
@@ -152,7 +200,7 @@ export function draw(
 
   // Pass 2: grid lines for fogged cells (so the frontier reads clearly).
   if (zoom >= 14) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.strokeStyle = TONES[toneName].grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let c = 0; c <= cols; c++) {
@@ -171,7 +219,7 @@ export function draw(
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const i = (r * cols + c) * 3;
-          if (data[i] !== ST_VOID && !(data[i] & ST_CLEAN)) continue;
+          if (data[i] !== ST_VOID && !isTidy(data[i])) continue;
           ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
           ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
         }
@@ -183,26 +231,53 @@ export function draw(
   if (zoom >= 8) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `700 ${Math.round(zoom * 0.62)}px system-ui, sans-serif`;
+    ctx.font = coloredNumbers
+      ? `700 ${Math.round(zoom * 0.62)}px system-ui, sans-serif`
+      : `700 ${Math.round(zoom * 0.7)}px ${HAND_FONT}`;
     ctx.lineJoin = 'round';
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const b = data[(r * cols + c) * 3];
         const state = b & ST_MASK;
-        if (state === 0 || b & ST_CLEAN) continue;
+        if (isTidy(b)) continue;
         const sx = px(x0 + c);
         const sy = py(y0 + r);
         const mx = sx + zoom / 2;
         const my = sy + zoom / 2;
+        if (state === 0) {
+          // A mine seen faintly through ice.
+          if ((b & (ST_ICE | ST_ICE_MINE)) === (ST_ICE | ST_ICE_MINE)) {
+            ctx.globalAlpha = 0.42;
+            drawMine(ctx, mx, my, zoom * 0.9, false);
+            ctx.globalAlpha = 1;
+          }
+          continue;
+        }
         if (state === ST_REVEALED) {
           if (b & ST_POWERUP && zoom >= 12) drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
           const n = b & 0x0f;
           if (n > 0 && zoom >= 12) {
-            ctx.lineWidth = Math.max(2, zoom * 0.14);
-            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-            ctx.strokeText(String(n), mx, my + zoom * 0.04);
-            ctx.fillStyle = NUMBER_COLORS[n];
-            ctx.fillText(String(n), mx, my + zoom * 0.04);
+            if (coloredNumbers) {
+              ctx.lineWidth = Math.max(2, zoom * 0.14);
+              ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+              ctx.strokeText(String(n), mx, my + zoom * 0.04);
+              ctx.fillStyle = NUMBER_COLORS[n];
+              ctx.fillText(String(n), mx, my + zoom * 0.04);
+            } else {
+              // Written by hand: a touch of tilt and wobble that is stable per cell.
+              const hsh = Math.imul(x0 + c, 73856093) ^ Math.imul(y0 + r, 19349663);
+              const tilt = (((hsh >>> 3) % 9) - 4) * 0.013;
+              const dx = (((hsh >>> 9) % 5) - 2) * zoom * 0.012;
+              ctx.save();
+              ctx.translate(mx + dx, my + zoom * 0.02);
+              ctx.rotate(tilt);
+              ctx.lineWidth = Math.max(1.5, zoom * 0.1);
+              ctx.strokeStyle = 'rgba(247, 238, 212, 0.7)';
+              ctx.strokeText(String(n), 0, 0);
+              ctx.fillStyle = INK;
+              ctx.fillText(String(n), 0, 0);
+              ctx.restore();
+            }
           }
         } else if (state === ST_FLAG) {
           drawFlag(ctx, sx, sy, zoom);
@@ -245,7 +320,7 @@ export function draw(
       const k = (r * cols + c) * 3;
       const sx = px(xs[i]);
       const sy = py(ys[i]);
-      ctx.fillStyle = FOGGED[paletteIndex(data[k + 1], data[k + 2])];
+      ctx.fillStyle = PAPER[paletteIndex(data[k + 1], data[k + 2])];
       ctx.globalAlpha = p <= 0 ? 1 : 1 - p;
       ctx.fillRect(sx, sy, size, size);
       if (p > 0) {
@@ -280,7 +355,7 @@ export function draw(
     }
   }
 
-  if (view !== 'preview') drawVignette(ctx, w, h);
+  if (view !== 'preview') drawPaperGrain(ctx, cam, w, h);
 }
 
 function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
@@ -390,10 +465,73 @@ function drawMine(ctx: CanvasRenderingContext2D, mx: number, my: number, z: numb
   ctx.stroke();
 }
 
-function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
-  g.addColorStop(0, 'rgba(40, 30, 10, 0)');
-  g.addColorStop(1, 'rgba(40, 30, 10, 0.35)');
-  ctx.fillStyle = g;
+const TEX = 256;
+
+/** A small seamless paper texture: soft stains, speckles and fibres. */
+function makePaperTexture(dark: boolean): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = TEX;
+  const g = c.getContext('2d')!;
+  let seed = 1337;
+  const rnd = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // Draw every mark at 9 offsets so the tile repeats without seams.
+  const wrap = (fn: (dx: number, dy: number) => void) => {
+    for (const dx of [-TEX, 0, TEX]) for (const dy of [-TEX, 0, TEX]) fn(dx, dy);
+  };
+  const dim = dark ? '0,0,0' : '110,80,40';
+  const lite = dark ? '255,235,200' : '255,250,235';
+
+  for (let i = 0; i < 16; i++) {
+    const x = rnd() * TEX;
+    const y = rnd() * TEX;
+    const r = 30 + rnd() * 70;
+    const a = 0.03 + rnd() * 0.045;
+    wrap((dx, dy) => {
+      const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      gr.addColorStop(0, `rgba(${dim},${a})`);
+      gr.addColorStop(1, `rgba(${dim},0)`);
+      g.fillStyle = gr;
+      g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r);
+    });
+  }
+  for (let i = 0; i < 1100; i++) {
+    const x = rnd() * TEX;
+    const y = rnd() * TEX;
+    g.fillStyle = `rgba(${rnd() < 0.6 ? dim : lite},${0.05 + rnd() * 0.14})`;
+    const s = rnd() < 0.12 ? 2 : 1;
+    wrap((dx, dy) => g.fillRect(x + dx, y + dy, s, s));
+  }
+  for (let i = 0; i < 170; i++) {
+    const x = rnd() * TEX;
+    const y = rnd() * TEX;
+    const len = 6 + rnd() * 18;
+    const ang = rnd() * Math.PI * 2;
+    const bend = (rnd() - 0.5) * 6;
+    g.strokeStyle = `rgba(${rnd() < 0.5 ? dim : lite},${0.05 + rnd() * 0.09})`;
+    g.lineWidth = 0.6 + rnd() * 0.5;
+    const ex = Math.cos(ang) * len;
+    const ey = Math.sin(ang) * len;
+    wrap((dx, dy) => {
+      g.beginPath();
+      g.moveTo(x + dx, y + dy);
+      g.quadraticCurveTo(x + dx + ex / 2 - Math.sin(ang) * bend, y + dy + ey / 2 + Math.cos(ang) * bend, x + dx + ex, y + dy + ey);
+      g.stroke();
+    });
+  }
+  return c;
+}
+
+/** Paper grain over the whole map, anchored to the map so it slides with panning. */
+function drawPaperGrain(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number) {
+  paperTexture ??= makePaperTexture(toneName === 'dark');
+  const pattern = ctx.createPattern(paperTexture, 'repeat');
+  if (!pattern) return;
+  pattern.setTransform(new DOMMatrix().translate(w / 2 - cam.cx * cam.zoom, h / 2 - cam.cy * cam.zoom));
+  ctx.fillStyle = pattern;
   ctx.fillRect(0, 0, w, h);
 }

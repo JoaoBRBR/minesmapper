@@ -1,5 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
-import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
@@ -40,6 +40,7 @@ const $mode = el<HTMLButtonElement>('mode');
 const $home = el<HTMLButtonElement>('home');
 const $menu = el<HTMLButtonElement>('menu');
 const $oracle = el<HTMLButtonElement>('oracle');
+const $menuBadge = el('menu-badge');
 const $banner = el('banner');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
@@ -71,6 +72,9 @@ let ripple: Ripple | null = null;
 let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
+let lastVisuals = visualsVersion;
+/** Phones and touch screens get a compact top bar; the rest lives in the menu. */
+const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
 /** A refused tap (too far from explored ground), flashed on the map. */
 const DENIED_MS = 500;
@@ -274,17 +278,25 @@ function updateHud(now: number) {
     const total = wd.safe_total();
     const pct = total ? Math.floor((wd.score() / total) * 100) : 0;
     const left = wd.mines_total() - wd.flag_count();
-    setText($score, `🏝 ${wd.score()} / ${total} (${pct}%) · 💣 ${left}${tail}`);
+    setText(
+      $score,
+      compactHud.matches
+        ? `🏝 ${pct}% · 💣 ${left}${wd.is_won() ? ' ✓' : wd.is_game_over() ? ' ✕' : ''}`
+        : `🏝 ${wd.score()} / ${total} (${pct}%) · 💣 ${left}${tail}`,
+    );
     setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? now) - startedAt));
   } else {
     setText(
       $score,
-      `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()} away · 🚩 ${wd.flag_count()}${tail}`,
+      compactHud.matches
+        ? `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()}${wd.is_game_over() ? ' ✕' : ''}`
+        : `★ ${wd.points().toLocaleString()} · 📏 ${wd.farthest()} away · 🚩 ${wd.flag_count()}${tail}`,
     );
   }
   const oracles = wd.powerups_available();
   if (oracles === 0 && oracleMode) oracleMode = false;
   $oracle.hidden = oracles === 0;
+  $menuBadge.hidden = oracles === 0;
   setText($oracle, `✨ Oracle ×${oracles}`);
   $oracle.setAttribute('aria-pressed', String(oracleMode));
   canvas.classList.toggle('targeting', oracleMode);
@@ -297,6 +309,10 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   if (!active || !world) return;
   stepGlide(now);
+  if (visualsVersion !== lastVisuals) {
+    lastVisuals = visualsVersion;
+    invalidate();
+  }
   if (settings.chunkBorders !== lastBorders) {
     lastBorders = settings.chunkBorders;
     invalidate();
@@ -400,9 +416,15 @@ function shake() {
 
 // --- Actions ----------------------------------------------------------------------------
 
-function isRevealedNumber(x: number, y: number): boolean {
+/**
+ * A revealed cell that is still on the map (not tidied away). Tapping it chords: the game
+ * itself checks the flags against the real number. Its *shown* number can be lower than the
+ * real one (mines hidden in tidied ground are left out) or even blank, so we can't tell from
+ * the digit.
+ */
+function isChordable(x: number, y: number): boolean {
   const b = world!.view(x, y, 1, 1)[0];
-  return (b & 0x30) === 0x20 && (b & 0x0f) > 0;
+  return (b & 0x30) === 0x20 && (b & 0xb0) !== 0xa0;
 }
 
 function activate(px: number, py: number, forceFlag: boolean) {
@@ -421,7 +443,7 @@ function activate(px: number, py: number, forceFlag: boolean) {
   }
   if (forceFlag || flagMode) {
     wd.toggle_flag(x, y);
-  } else if (isRevealedNumber(x, y)) {
+  } else if (isChordable(x, y)) {
     wd.chord(x, y);
   } else if (wd.is_out_of_reach(x, y)) {
     deny(x, y);
@@ -674,6 +696,7 @@ el('b-look').addEventListener('click', () => {
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__dev = {
     world: () => world,
+    makeWorld,
     invalidate,
     goto(x: number, y: number, zoom = 32) {
       cam.cx = x + 0.5;
@@ -687,3 +710,22 @@ if (import.meta.env.DEV) {
     ],
   };
 }
+
+// --- Hooks for the in-game menu --------------------------------------------------------------
+
+export const isFlagMode = () => flagMode;
+
+export function setFlagMode(on: boolean) {
+  if (on !== flagMode) toggleFlagMode();
+}
+
+export function recenterView() {
+  recenter();
+}
+
+export function startOracleTargeting() {
+  toggleOracleMode();
+}
+
+export const oraclesAvailable = () => (world ? world.powerups_available() : 0);
+export const isOracleTargeting = () => oracleMode;

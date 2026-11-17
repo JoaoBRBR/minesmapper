@@ -87,8 +87,8 @@ function render() {
   }
   if (created) world.clear_chunk_cache();
 
-  // Darken so the menu stays readable.
-  ctx.fillStyle = 'rgba(8, 16, 28, 0.55)';
+  // A warm wash so the menu reads as a faded map; darker in dark-paper mode.
+  ctx.fillStyle = document.documentElement.dataset.paper === 'dark' ? 'rgba(20, 12, 4, 0.62)' : 'rgba(110, 76, 34, 0.34)';
   ctx.fillRect(0, 0, w, h);
 }
 

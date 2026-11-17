@@ -6,10 +6,14 @@ export interface Settings {
   vibration: boolean;
   /** Advanced / debugging: outline the cleanup chunks. */
   chunkBorders: boolean;
+  /** Darker parchment for night play. */
+  darkPaper: boolean;
+  /** Classic coloured numbers instead of ink-written ones. */
+  coloredNumbers: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, coloredNumbers: false };
 
 function load(): Settings {
   try {
@@ -19,6 +23,8 @@ function load(): Settings {
       sound: typeof raw.sound === 'boolean' ? raw.sound : DEFAULTS.sound,
       vibration: typeof raw.vibration === 'boolean' ? raw.vibration : DEFAULTS.vibration,
       chunkBorders: typeof raw.chunkBorders === 'boolean' ? raw.chunkBorders : DEFAULTS.chunkBorders,
+      darkPaper: typeof raw.darkPaper === 'boolean' ? raw.darkPaper : DEFAULTS.darkPaper,
+      coloredNumbers: typeof raw.coloredNumbers === 'boolean' ? raw.coloredNumbers : DEFAULTS.coloredNumbers,
     };
   } catch {
     return { ...DEFAULTS };
@@ -28,8 +34,16 @@ function load(): Settings {
 /** Live settings object: read it whenever you need the current value. */
 export const settings: Settings = load();
 
+const listeners = new Set<() => void>();
+
+/** Calls back whenever any setting changes (from any place that edits settings). */
+export function onSettingsChange(callback: () => void) {
+  listeners.add(callback);
+}
+
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
   settings[key] = value;
+  listeners.forEach((cb) => cb());
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {

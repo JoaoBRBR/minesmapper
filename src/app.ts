@@ -2,12 +2,25 @@ import init from './wasm/pkg/minefield';
 import { setBackground } from './background';
 import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
-import { prefersReducedMotion, setSetting, settings } from './settings';
+import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Settings } from './settings';
 import { sound } from './sound';
 import { bump, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
 import { DIFFICULTIES, ISLAND_SIZES, makeWorld, randomSeed, seedFromText } from './config';
-import { fmtTime, initGame, loadWorld, setActive, snapshot, thumbnail } from './game';
+import {
+  fmtTime,
+  initGame,
+  isFlagMode,
+  loadWorld,
+  oraclesAvailable,
+  recenterView,
+  setActive,
+  setFlagMode,
+  snapshot,
+  startOracleTargeting,
+  thumbnail,
+} from './game';
+import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
   deleteWorld,
@@ -315,13 +328,52 @@ async function openStats() {
 
 // --- Pause menu -------------------------------------------------------------------------
 
+/** Fills the menu with the current state each time it opens. */
+function syncMenu() {
+  el('pause-name').textContent = current?.name ?? '';
+  el('menu-pos').textContent = el('pos').textContent ?? '';
+  const flagging = isFlagMode();
+  document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) => {
+    const on = (b.dataset.v === 'flag') === flagging;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const oracles = oraclesAvailable();
+  const oracle = el<HTMLButtonElement>('m-oracle');
+  oracle.hidden = oracles === 0;
+  oracle.textContent = `✨ Use an oracle (×${oracles})`;
+}
+
 function openPause() {
   if (screen !== 'game') return;
   if (!$pause.hidden) return closePause();
-  el('pause-name').textContent = current?.name ?? '';
+  syncMenu();
   $pause.hidden = false;
 }
 const closePause = () => ($pause.hidden = true);
+
+function bindGameMenu() {
+  document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) =>
+    b.addEventListener('click', () => {
+      setFlagMode(b.dataset.v === 'flag');
+      closePause();
+    }),
+  );
+  el('m-center').addEventListener('click', () => {
+    recenterView();
+    closePause();
+  });
+  el('m-oracle').addEventListener('click', () => {
+    closePause();
+    startOracleTargeting();
+  });
+  el('p-resume').addEventListener('click', closePause);
+  el('p-restart').addEventListener('click', () => void restartCurrent());
+  el('p-exit').addEventListener('click', () => void goHome());
+  $pause.addEventListener('click', (e) => {
+    if (e.target === $pause) closePause();
+  });
+}
 
 async function restartCurrent() {
   if (!current) return;
@@ -388,7 +440,7 @@ function syncCreatorVisibility() {
   const island = modeSeg.get() === 'island';
   el('c-size-wrap').hidden = !island;
   el('c-mode-hint').textContent = island
-    ? 'A finite island surrounded by water. Clear every safe cell to win. You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.'
+    ? 'A finite island surrounded by water. Clear every safe cell to win, lakes included: water turns to see-through ice once you reach it. You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.'
     : 'An infinite map. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines). You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.';
   el('c-d1-label').firstChild!.textContent = island ? 'Mines at the coast ' : 'Mines far away ';
 }
@@ -427,7 +479,7 @@ function drawPreview() {
   draw(pctx, world, { cx: 0.5, cy: 0.5, zoom }, css, css, 'preview');
   el('c-stats').textContent =
     cfg.mode === 'island'
-      ? `${world.land_total().toLocaleString()} land cells · about ${world.mines_total().toLocaleString()} mines`
+      ? `${world.land_total().toLocaleString()} playable cells${world.lake_total() ? ` (${world.lake_total().toLocaleString()} in lakes)` : ''} · about ${world.mines_total().toLocaleString()} mines`
       : `Preview of the area around the start (${Math.round(css / zoom)}×${Math.round(css / zoom)} cells)`;
   world.free();
 }
@@ -502,16 +554,14 @@ function bindCreator() {
 const $settings = el('settings');
 
 function bindSettings() {
-  const rows = [
-    ['s-animations', 'animations'],
-    ['s-sound', 'sound'],
-    ['s-vibration', 'vibration'],
-    ['s-chunks', 'chunkBorders'],
-  ] as const;
-  for (const [id, key] of rows) {
-    const input = el<HTMLInputElement>(id);
-    input.checked = settings[key];
+  // The same switches live in the Settings dialog and in the game menu; keep them all in sync.
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input[data-setting]')];
+  const sync = () => inputs.forEach((i) => (i.checked = settings[i.dataset.setting as keyof Settings]));
+  sync();
+  onSettingsChange(sync);
+  for (const input of inputs) {
     input.addEventListener('change', () => {
+      const key = input.dataset.setting as keyof Settings;
       setSetting(key, input.checked);
       // Give immediate feedback when something is switched on.
       if (input.checked && key === 'sound') sound.test();
@@ -519,8 +569,10 @@ function bindSettings() {
     });
   }
   if (!vibrationSupported) {
-    el<HTMLInputElement>('s-vibration').disabled = true;
-    el('s-vibration-row').classList.add('disabled');
+    for (const i of inputs.filter((x) => x.dataset.setting === 'vibration')) {
+      i.disabled = true;
+      i.closest('.switch')?.classList.add('disabled');
+    }
     el('s-vibration-hint').textContent = 'Not supported by this browser (for example iPhone Safari).';
   }
   if (prefersReducedMotion()) {
@@ -529,7 +581,6 @@ function bindSettings() {
   const open = () => ($settings.hidden = false);
   const close = () => ($settings.hidden = true);
   el('h-settings').addEventListener('click', open);
-  el('p-settings').addEventListener('click', open);
   el('s-close').addEventListener('click', close);
   $settings.addEventListener('click', (e) => {
     if (e.target === $settings) close();
@@ -547,10 +598,12 @@ function bindSettings() {
 export async function start() {
   await init();
   await loadStats();
+  initTheme();
   requestPersistence();
   initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
   bindCreator();
   bindSettings();
+  bindGameMenu();
   setupInstall(el<HTMLButtonElement>('h-install'), el('ios-hint'));
   const $update = el('update');
   el('update-reload').addEventListener('click', () => location.reload());
@@ -564,12 +617,6 @@ export async function start() {
     if (!confirm('Reset all lifetime stats and records? Your saved worlds are not affected.')) return;
     await resetStats();
     await renderStats();
-  });
-  el('p-resume').addEventListener('click', closePause);
-  el('p-restart').addEventListener('click', () => void restartCurrent());
-  el('p-exit').addEventListener('click', () => void goHome());
-  $pause.addEventListener('click', (e) => {
-    if (e.target === $pause) closePause();
   });
 
   // Never lose progress when the tab is hidden or closed.

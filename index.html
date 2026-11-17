@@ -8,26 +8,31 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Minefield" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#26547f" />
+    <meta name="theme-color" content="#e3d2a4" />
     <title>Minefield — infinite minesweeper</title>
   </head>
   <body>
     <canvas id="bg" hidden aria-hidden="true"></canvas>
     <canvas id="map" hidden></canvas>
 
+    <!-- The aged edge of the paper, over the map but under the dialogs. -->
+    <div id="vintage" aria-hidden="true"></div>
+
     <div id="hud" hidden>
       <span class="chip" id="score">0 cleared</span>
       <span class="chip" id="timer" hidden>00:00</span>
-      <button id="mode" aria-pressed="false">⛏ Reveal</button>
-      <button id="oracle" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
-      <button id="home" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
-      <button id="menu" title="Menu (Esc)">☰ Menu</button>
-      <span class="chip" id="pos">0, 0</span>
+      <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
+      <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
+      <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
+      <span class="chip hud-extra" id="pos">0, 0</span>
+      <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
+        <span class="ico">☰</span><span class="lbl"> Menu</span><span id="menu-badge" class="dot" hidden>✨</span>
+      </button>
     </div>
 
     <div id="toast" role="status" hidden></div>
@@ -50,16 +55,49 @@
       <button id="update-dismiss" aria-label="Dismiss">✕</button>
     </div>
 
-    <!-- Pause menu -->
-    <div id="pause" class="overlay" hidden>
-      <div class="dialog">
-        <div class="dialog-title">Paused</div>
-        <small id="pause-name"></small>
-        <div class="stack">
-          <button id="p-resume" class="primary">▶ Resume</button>
-          <button id="p-restart">↻ Restart this world</button>
-          <button id="p-settings">⚙ Settings</button>
-          <button id="p-exit">⌂ Save &amp; exit to menu</button>
+    <!-- Game menu: a dropdown from the top right -->
+    <div id="pause" class="overlay menu-overlay" hidden>
+      <div class="dialog menu-panel" role="menu" aria-label="Game menu">
+        <div class="menu-head">
+          <b id="pause-name"></b>
+          <button id="p-resume" aria-label="Close menu">✕</button>
+        </div>
+        <div class="menu-info" id="menu-pos"></div>
+        <div class="seg" id="m-mode">
+          <button type="button" data-v="reveal">⛏ Reveal</button>
+          <button type="button" data-v="flag">🚩 Flag</button>
+        </div>
+        <button id="m-center">⌖ Center on the start</button>
+        <button id="m-oracle" hidden>✨ Oracle</button>
+        <div class="menu-toggles">
+        <label class="switch">
+          <b>Reveal animations</b>
+          <input type="checkbox" id="m-animations" data-setting="animations" />
+        </label>
+        <label class="switch">
+          <b>Sound effects</b>
+          <input type="checkbox" id="m-sound" data-setting="sound" />
+        </label>
+        <label class="switch">
+          <b>Vibration</b>
+          <input type="checkbox" id="m-vibration" data-setting="vibration" />
+        </label>
+        <label class="switch">
+          <b>Dark paper</b>
+          <input type="checkbox" id="m-darkPaper" data-setting="darkPaper" />
+        </label>
+        <label class="switch">
+          <b>Colored numbers</b>
+          <input type="checkbox" id="m-coloredNumbers" data-setting="coloredNumbers" />
+        </label>
+        <label class="switch">
+          <b>Show chunk borders</b>
+          <input type="checkbox" id="m-chunkBorders" data-setting="chunkBorders" />
+        </label>
+        </div>
+        <div class="row">
+          <button id="p-restart">↻ Restart</button>
+          <button id="p-exit" class="primary">⌂ Save &amp; exit</button>
         </div>
       </div>
     </div>
@@ -70,23 +108,33 @@
         <div class="dialog-title" id="settings-title">Settings</div>
         <label class="switch">
           <b>Reveal animations</b>
-          <input type="checkbox" id="s-animations" />
+          <input type="checkbox" id="s-animations" data-setting="animations" />
           <small id="s-animations-hint">Cells ripple open; mines pop when you lose.</small>
         </label>
         <label class="switch">
           <b>Sound effects</b>
-          <input type="checkbox" id="s-sound" />
+          <input type="checkbox" id="s-sound" data-setting="sound" />
           <small>Clicks, flags, explosions and a victory chime.</small>
         </label>
         <label class="switch" id="s-vibration-row">
           <b>Vibration</b>
-          <input type="checkbox" id="s-vibration" />
+          <input type="checkbox" id="s-vibration" data-setting="vibration" />
           <small id="s-vibration-hint">Short buzzes for flags, mines and wins.</small>
+        </label>
+        <label class="switch">
+          <b>Dark paper</b>
+          <input type="checkbox" id="s-darkPaper" data-setting="darkPaper" />
+          <small>A darker parchment, easier on the eyes at night.</small>
+        </label>
+        <label class="switch">
+          <b>Colored numbers</b>
+          <input type="checkbox" id="s-coloredNumbers" data-setting="coloredNumbers" />
+          <small>Classic coloured digits instead of ink-written ones.</small>
         </label>
         <div class="adv-title">Advanced</div>
         <label class="switch">
           <b>Show chunk borders</b>
-          <input type="checkbox" id="s-chunks" />
+          <input type="checkbox" id="s-chunks" data-setting="chunkBorders" />
           <small>Outlines the 16×16 cleanup chunks and marks finished ones. Handy for testing.</small>
         </label>
         <div class="stack"><button id="s-close" class="primary">Done</button></div>
