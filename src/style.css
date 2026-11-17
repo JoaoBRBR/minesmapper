@@ -1312,3 +1312,40 @@ button.small {
     height: 44px;
   }
 }
+
+/* Adventure: the grid scrolls inside its panel, the header stays put */
+.screen {
+  overscroll-behavior: contain;
+}
+#adventure > .panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 108px);
+  max-height: calc(100dvh - 108px);
+}
+#adventure .adv-head {
+  flex: none;
+}
+#levels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 4px 4px;
+  margin-right: -6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+
+/* Back button: arrow only on phones */
+@media (max-width: 720px), (pointer: coarse) {
+  .back-fab {
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+  }
+  .back-fab .lbl {
+    display: none;
+  }
+}
