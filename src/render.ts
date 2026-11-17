@@ -241,10 +241,13 @@ export function draw(
     }
   }
 
+  const edges = view !== 'preview' ? collectEdges(data, cols, rows, x0, y0, px, py) : null;
+
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
     drawPaperGrain(ctx, cam, w, h);
+    if (edges) drawFrontierStain(ctx, edges.found, zoom);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const i = (r * cols + c) * 3;
@@ -287,7 +290,7 @@ export function draw(
 
   // Outlines: a firm line around everything that is not part of the game, and a softer one
   // around everything you have discovered (so sand never melts into the paper).
-  if (view !== 'preview') drawOutlines(ctx, data, cols, rows, x0, y0, px, py, zoom, progress);
+  if (edges) strokeOutlines(ctx, edges, zoom, progress);
   if (progress) return;
 
   // Pass 3: glyphs (numbers, flags, mines).
@@ -471,8 +474,14 @@ function forEachEdge(
   }
 }
 
-function drawOutlines(
-  ctx: CanvasRenderingContext2D,
+interface Edges {
+  /** Between what is part of the game and what is not (the sea). */
+  coast: Path2D;
+  /** Between discovered and undiscovered ground. */
+  found: Path2D;
+}
+
+function collectEdges(
   data: Uint8Array,
   cols: number,
   rows: number,
@@ -480,10 +489,7 @@ function drawOutlines(
   y0: number,
   px: (x: number) => number,
   py: (y: number) => number,
-  zoom: number,
-  progress: boolean,
-) {
-  const tone = TONES[toneName];
+): Edges {
   const coast = new Path2D();
   const found = new Path2D();
   forEachEdge(data, cols, rows, (r, c, dir, a, b) => {
@@ -501,14 +507,40 @@ function drawOutlines(
       path.lineTo(px(x0 + c + 1), y);
     }
   });
+  return { coast, found };
+}
+
+function strokeOutlines(ctx: CanvasRenderingContext2D, edges: Edges, zoom: number, progress: boolean) {
+  const tone = TONES[toneName];
   ctx.lineCap = 'square';
   ctx.lineWidth = Math.max(1, Math.min(2.4, zoom * 0.12));
   ctx.strokeStyle = progress ? 'rgba(20, 40, 25, 0.75)' : tone.found;
-  ctx.stroke(found);
+  ctx.stroke(edges.found);
   ctx.lineWidth = Math.max(1.4, Math.min(3, zoom * 0.16));
   ctx.strokeStyle = progress ? 'rgba(220, 236, 228, 0.7)' : tone.coast;
-  ctx.stroke(coast);
+  ctx.stroke(edges.coast);
   ctx.lineCap = 'butt';
+}
+
+/**
+ * A soft, aged stain on the paper along the edge of what you have discovered, like damp creeping
+ * in from the edge of a worked sheet. Gentle up close, wider and a little stronger from above.
+ * It is drawn before the discovered cells are repainted, so only the undiscovered side shows it.
+ */
+function drawFrontierStain(ctx: CanvasRenderingContext2D, found: Path2D, zoom: number) {
+  const far = 1 - Math.min(1, Math.max(0, (zoom - 4) / 36)); // 1 when zoomed far out, 0 up close
+  const width = 8 + far * 26;
+  const alpha = 0.05 + far * 0.08;
+  const dark = toneName === 'dark';
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const [scale, weight] of [[1, 0.45], [0.62, 0.7], [0.3, 1]] as const) {
+    ctx.lineWidth = width * scale;
+    ctx.strokeStyle = dark ? `rgba(0, 0, 0, ${alpha * weight * 1.7})` : `rgba(120, 76, 32, ${alpha * weight})`;
+    ctx.stroke(found);
+  }
+  ctx.restore();
 }
 
 /** Gentle waves lapping at the shore: wavy lines just outside every stretch of coast. */

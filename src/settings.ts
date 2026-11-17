@@ -23,10 +23,12 @@ export interface Settings {
   musicVolume: number;
   /** Gentle animated waves along island shores. */
   waves: boolean;
+  /** Desktop: move the map with the arrow keys or WASD. */
+  keyboardMove: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true, keyboardMove: true };
 
 function load(): Settings {
   try {
@@ -52,6 +54,7 @@ function load(): Settings {
           ? raw.musicVolume
           : DEFAULTS.musicVolume,
       waves: typeof raw.waves === 'boolean' ? raw.waves : DEFAULTS.waves,
+      keyboardMove: typeof raw.keyboardMove === 'boolean' ? raw.keyboardMove : DEFAULTS.keyboardMove,
     };
   } catch {
     return { ...DEFAULTS };

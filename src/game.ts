@@ -4,7 +4,7 @@ import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
 import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
-import { bump, noteEndless, noteIslandWin } from './stats';
+import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -51,6 +51,8 @@ const $bProgress = el<HTMLButtonElement>('b-progress');
 const $progressBar = el('progress-bar');
 const $progressText = el('progress-text');
 const $progressBtn = el<HTMLButtonElement>('progress');
+const $fab = el<HTMLButtonElement>('fab');
+const $fabIcon = el('fab-ico');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
 
@@ -76,6 +78,29 @@ let dirty = true;
 // Timer: starts on the first reveal, stops on win/loss.
 let startedAt: number | null = null;
 let endedAt: number | null = null;
+/** Set while the clock is stopped (menu open, tab hidden, ...). */
+let pausedSince: number | null = null;
+/** A daily island that was just cleared: the streak it brought you to. */
+let wonStreak = 0;
+
+/** The timer only counts time spent looking at the map. */
+function clockPaused() {
+  return !active || document.hidden || !el('pause').hidden || !el('settings').hidden || !el('viewer').hidden;
+}
+
+/** Call whenever something might have paused or resumed the clock. */
+function syncClock(now = performance.now()) {
+  const paused = clockPaused();
+  if (paused && pausedSince === null) {
+    pausedSince = now;
+  } else if (!paused && pausedSince !== null) {
+    if (startedAt !== null && endedAt === null) startedAt += now - pausedSince; // skip the time away
+    pausedSince = null;
+  }
+}
+
+/** "Now" as far as the game clock is concerned: frozen while paused. */
+const clockNow = (now: number) => pausedSince ?? now;
 /** When the end dialog last appeared. Taps right after are ignored, so a fast tap on the map can't hit a button. */
 let bannerShownAt = 0;
 let bannerKey = '';
@@ -101,6 +126,7 @@ const animationsOn = () => settings.animations && !prefersReducedMotion();
 
 export function initGame(callbacks: GameCallbacks) {
   cb = callbacks;
+  document.addEventListener('visibilitychange', () => syncClock());
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(frame);
@@ -124,6 +150,9 @@ export function loadWorld(
   const now = performance.now();
   startedAt = finished ? 0 : elapsedMs > 0 || world.score() > 0 ? now - elapsedMs : null;
   endedAt = finished ? elapsedMs : null;
+  pausedSince = null;
+  wonStreak = 0;
+  cancelPendingTap();
   bannerKey = '';
   bannerDismissed = false;
   ripple = null;
@@ -147,7 +176,7 @@ export function loadWorld(
 export function snapshot(): Snapshot {
   const wd = world!;
   const status: Status = wd.is_won() ? 'won' : wd.is_game_over() ? 'lost' : 'playing';
-  const elapsedMs = startedAt === null ? 0 : (endedAt ?? performance.now()) - startedAt;
+  const elapsedMs = startedAt === null ? 0 : (endedAt ?? clockNow(performance.now())) - startedAt;
   return {
     state: wd.export_state(),
     cleared: wd.score(),
@@ -203,6 +232,7 @@ export function setActive(on: boolean) {
   } else {
     resize();
   }
+  syncClock();
 }
 
 function invalidate() {
@@ -316,7 +346,7 @@ function updateBanner(now: number) {
     if (key) cb.onChange(); // save the result right away
     if (key === 'won') {
       $bannerTitle.textContent = '🏝 Island cleared!';
-      $bannerSub.textContent = `Time ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}${wonRecord ? ' · 🏆 New best!' : ''}`;
+      $bannerSub.textContent = `Time ${fmtTime((endedAt ?? 0) - (startedAt ?? 0))}${wonRecord ? ' · 🏆 New best!' : ''}${wonStreak > 1 ? ` · 🔥 ${wonStreak}-day streak` : ''}`;
     } else if (key === 'lost') {
       $bannerTitle.textContent = '💥 Boom!';
       $bannerSub.textContent = `You cleared ${wd.score()} cells`;
@@ -337,7 +367,7 @@ function updateHud(now: number) {
   const island = wd.is_island();
   const finished = wd.is_game_over() || wd.is_won();
   if (startedAt === null && wd.score() > 0) startedAt = now;
-  if (startedAt !== null && endedAt === null && finished) endedAt = now;
+  if (startedAt !== null && endedAt === null && finished) endedAt = clockNow(now);
 
   const tail = wd.is_won() ? ' · cleared!' : wd.is_game_over() ? ' · game over' : '';
   if (island) {
@@ -350,7 +380,7 @@ function updateHud(now: number) {
         ? `🏝 ${pct}% · 💣 ${left}${wd.is_won() ? ' ✓' : wd.is_game_over() ? ' ✕' : ''}`
         : `🏝 ${wd.score()} / ${total} (${pct}%) · 💣 ${left}${tail}`,
     );
-    setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? now) - startedAt));
+    setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? clockNow(now)) - startedAt));
   } else {
     setText(
       $score,
@@ -372,6 +402,10 @@ function updateHud(now: number) {
   $oracle.setAttribute('aria-pressed', String(oracleMode));
   canvas.classList.toggle('targeting', oracleMode || iceMode);
   if (progressView) setText($progressText, progressSummary(wd));
+  // the floating Reveal/Flag button (phones)
+  $fab.hidden = progressView;
+  setText($fabIcon, flagMode ? '🚩' : '⛏');
+  $fab.setAttribute('aria-pressed', String(flagMode));
   if (now - lastMoodCheck > 1500) {
     // The music follows the biome in the middle of the screen.
     lastMoodCheck = now;
@@ -386,6 +420,8 @@ function updateHud(now: number) {
 function frame(now: number) {
   requestAnimationFrame(frame);
   if (!active || !world) return;
+  syncClock(now);
+  stepKeyboard(now);
   stepGlide(now);
   if (wavesOn() && now - lastWave > 66) {
     lastWave = now;
@@ -671,7 +707,9 @@ function feedback(
   } else if (!before.won && wd.is_won()) {
     bump('wins');
     musicWin();
-    if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, startedAt === null ? 0 : now - startedAt);
+    const took = startedAt === null ? 0 : clockNow(now) - startedAt;
+    if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, took);
+    if (cfg?.daily) wonStreak = noteDailyWin(cfg.daily, took);
     sound.win();
     haptics.win();
     if (animate) endFx = { kind: 'won', t0: now, origin: [x, y] };
@@ -799,7 +837,49 @@ function endPointer(e: PointerEvent, cancelled: boolean) {
   pointers.delete(e.pointerId);
   clearTimeout(pressTimer);
   if (cancelled || !wasSingle || dragged || longPressed) return;
-  activate(e.clientX, e.clientY, e.button === 2);
+  handleTap(e.clientX, e.clientY, e.button === 2);
+}
+
+// A quick second tap on ground you have already discovered zooms in (or back out). Taps on hidden
+// cells always act at once, so double-tapping never causes a surprise reveal. A single tap on a
+// discovered cell (a chord) waits a moment to see whether a second one follows.
+const DOUBLE_TAP_MS = 280;
+let pendingTap: { x: number; y: number; timer: number } | null = null;
+
+function cancelPendingTap() {
+  if (pendingTap) clearTimeout(pendingTap.timer);
+  pendingTap = null;
+}
+
+function handleTap(px: number, py: number, secondary: boolean) {
+  const plain = !secondary && !flagMode && !oracleMode && !iceMode && !progressView && !!world;
+  const [cx, cy] = plain ? screenToCell(cam, w, h, px, py) : [0, 0];
+  if (!plain || !isChordable(cx, cy)) {
+    const wasWaiting = pendingTap;
+    cancelPendingTap();
+    if (wasWaiting) activate(wasWaiting.x, wasWaiting.y, false);
+    activate(px, py, secondary);
+    return;
+  }
+  if (pendingTap && Math.hypot(px - pendingTap.x, py - pendingTap.y) < 36) {
+    cancelPendingTap();
+    doubleTapZoom(cx, cy);
+    return;
+  }
+  const waiting = pendingTap;
+  cancelPendingTap();
+  if (waiting) activate(waiting.x, waiting.y, false);
+  const timer = window.setTimeout(() => {
+    const p = pendingTap;
+    pendingTap = null;
+    if (p) activate(p.x, p.y, false);
+  }, DOUBLE_TAP_MS);
+  pendingTap = { x: px, y: py, timer };
+}
+
+function doubleTapZoom(cx: number, cy: number) {
+  const tz = cam.zoom < 36 ? Math.min(60, cam.zoom * 2.2) : Math.max(minZoom(), cam.zoom / 2.4);
+  glideTo(cx + 0.5, cy + 0.5, tz, 420);
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
 canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
@@ -819,19 +899,89 @@ function toggleFlagMode() {
   $mode.setAttribute('aria-pressed', String(flagMode));
 }
 
+// --- Desktop keyboard ------------------------------------------------------------------------
+//   arrows / WASD pan (optional)   Space or Enter reveal (or chord) under the cursor
+//   F flag the cell under the cursor   M switch Reveal/Flag   P progress   C centre
+//   + / - zoom   O oracle   I ice clearer   Esc menu / cancel
+const PAN_KEYS: Record<string, [number, number]> = {
+  arrowleft: [-1, 0],
+  a: [-1, 0],
+  arrowright: [1, 0],
+  d: [1, 0],
+  arrowup: [0, -1],
+  w: [0, -1],
+  arrowdown: [0, 1],
+  s: [0, 1],
+};
+const heldKeys = new Set<string>();
+let lastKeyFrame = 0;
+let cursor: [number, number] | null = null;
+
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse') cursor = [e.clientX, e.clientY];
+});
+
+function activateAtCursor(forceFlag: boolean) {
+  if (cursor) activate(cursor[0], cursor[1], forceFlag);
+  else if (forceFlag) toggleFlagMode(); // no mouse: fall back to switching mode
+}
+
+/** Moves the map while a pan key is held. */
+function stepKeyboard(now: number) {
+  const dt = Math.min(0.05, (now - lastKeyFrame) / 1000);
+  lastKeyFrame = now;
+  if (!heldKeys.size || !settings.keyboardMove) return;
+  let dx = 0;
+  let dy = 0;
+  for (const k of heldKeys) {
+    dx += PAN_KEYS[k][0];
+    dy += PAN_KEYS[k][1];
+  }
+  if (!dx && !dy) return;
+  const speed = 760 / cam.zoom; // cells per second: about the same on screen at any zoom
+  const len = Math.hypot(dx, dy);
+  cam.cx += (dx / len) * speed * dt;
+  cam.cy += (dy / len) * speed * dt;
+  glide = null;
+  invalidate();
+}
+
 window.addEventListener('keydown', (e) => {
-  if (!active || e.target instanceof HTMLInputElement || !el('settings').hidden || !el('viewer').hidden) return;
-  if (e.key === 'f' || e.key === 'F') toggleFlagMode();
-  if (e.key === 'c' || e.key === 'C' || e.key === 'Home') recenter();
-  if (e.key === 'o' || e.key === 'O') toggleOracleMode();
-  if (e.key === 'i' || e.key === 'I') toggleIceMode();
-  if (e.key === 'Escape') {
+  if (!active || e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!el('settings').hidden || !el('viewer').hidden) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+  const menuOpen = !el('pause').hidden;
+  if (k === 'escape') {
     if (progressView) setProgressView(false);
     else if (oracleMode || iceMode) oracleMode = iceMode = false;
     else cb.onMenu();
+    return;
   }
+  if (menuOpen) return;
+  if (settings.keyboardMove && k in PAN_KEYS) {
+    heldKeys.add(k);
+    glide = null;
+    e.preventDefault();
+    return;
+  }
+  // let a focused button keep Space/Enter for itself
+  if ((k === ' ' || k === 'enter') && e.target instanceof HTMLButtonElement) return;
+  if (k === ' ' || k === 'enter') {
+    e.preventDefault();
+    activateAtCursor(false);
+  } else if (k === 'f') activateAtCursor(true);
+  else if (k === 'm') toggleFlagMode();
+  else if (k === 'c' || k === 'home') recenter();
+  else if (k === 'o') toggleOracleMode();
+  else if (k === 'i') toggleIceMode();
+  else if (k === 'p') setProgressView(!progressView);
+  else if (k === '+' || k === '=') zoomAt(w / 2, h / 2, 1.3);
+  else if (k === '-' || k === '_') zoomAt(w / 2, h / 2, 1 / 1.3);
 });
+window.addEventListener('keyup', (e) => heldKeys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => heldKeys.clear());
 $mode.addEventListener('click', toggleFlagMode);
+$fab.addEventListener('click', toggleFlagMode);
 $home.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
 $oracle.addEventListener('click', toggleOracleMode);

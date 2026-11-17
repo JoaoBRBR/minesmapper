@@ -37,6 +37,11 @@
       </button>
     </div>
 
+    <!-- Floating Reveal/Flag switch for phones -->
+    <button id="fab" hidden aria-pressed="false" aria-label="Switch between revealing and flagging" title="Reveal / Flag">
+      <span id="fab-ico">⛏</span>
+    </button>
+
     <div id="toast" role="status" hidden></div>
 
     <!-- Progress view: a simplified map of what you have found -->
@@ -155,6 +160,11 @@
           <small>Gentle waves along island shores.</small>
         </label>
         <label class="switch">
+          <b>Keyboard movement</b>
+          <input type="checkbox" id="s-keyboardMove" data-setting="keyboardMove" />
+          <small>Desktop: arrow keys or WASD pan the map. Space reveals under the cursor, F flags it, M switches mode, P shows progress, +/- zoom.</small>
+        </label>
+        <label class="switch">
           <b>Sound effects</b>
           <input type="checkbox" id="s-sound" data-setting="sound" />
           <small>Clicks, flags, explosions and a victory chime.</small>
@@ -215,6 +225,7 @@
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
           <button id="h-trophies">🏆 Finished islands</button>
           <button id="h-stats">📊 Stats</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>

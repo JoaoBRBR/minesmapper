@@ -22,6 +22,8 @@ export interface Stats {
   bestIslandMs: Record<string, number>;
   /** Best endless score and farthest distance per difficulty (custom is excluded). */
   endlessBest: Record<string, { points: number; farthest: number }>;
+  /** Fastest clearing time (ms) of each daily island you cleared, keyed by its UTC date. */
+  dailyWins: Record<string, number>;
 }
 
 type Counter =
@@ -52,6 +54,7 @@ const blank = (): Stats => ({
   oraclesUsed: 0,
   bestIslandMs: {},
   endlessBest: {},
+  dailyWins: {},
 });
 
 /** Live object (ES module binding: always read it through this export). */
@@ -121,4 +124,28 @@ export async function resetStats() {
   stats = blank();
   if (wasPlaying) startPlay();
   await flushStats();
+}
+
+// --- Daily island --------------------------------------------------------------------------
+
+const dayBefore = (key: string) => new Date(Date.parse(`${key}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+
+/** How many days in a row (ending today, or yesterday if today is not done yet) you cleared the daily island. */
+export function dailyStreak(today = new Date().toISOString().slice(0, 10)): number {
+  let day = stats.dailyWins[today] !== undefined ? today : dayBefore(today);
+  let streak = 0;
+  while (stats.dailyWins[day] !== undefined) {
+    streak++;
+    day = dayBefore(day);
+  }
+  return streak;
+}
+
+/** Records a cleared daily island (the best time of that day is kept) and returns the new streak. */
+export function noteDailyWin(day: string, ms: number): number {
+  const best = stats.dailyWins[day];
+  if (ms > 0 && (best === undefined || ms < best)) stats.dailyWins[day] = Math.round(ms);
+  else if (best === undefined) stats.dailyWins[day] = 0;
+  changed();
+  return dailyStreak();
 }

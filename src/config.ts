@@ -12,6 +12,27 @@ export const WORLD_GEN = 2;
 
 export const ISLAND_SIZES = { small: 96, medium: 192, large: 320 } as const;
 
+/** Today's date in UTC, e.g. 2026-11-17: the daily island is the same for everyone on that day. */
+export const todayKey = (d = new Date()) => d.toISOString().slice(0, 10);
+
+/**
+ * The daily island: one shared seed per UTC day, always medium size and normal difficulty so
+ * everyone's time is comparable.
+ */
+export function dailyConfig(key = todayKey()): WorldConfig {
+  return {
+    mode: 'island',
+    seed: seedFromText(`mines-mappers-daily-${key}`),
+    seedText: `Daily ${key}`,
+    size: ISLAND_SIZES.medium,
+    difficulty: 'normal',
+    density: DIFFICULTIES.normal.density,
+    maxDensity: DIFFICULTIES.normal.maxDensity,
+    gen: WORLD_GEN,
+    daily: key,
+  };
+}
+
 /** Endless mode: distance (cells) over which mine density ramps up. */
 const ENDLESS_RAMP_LEN = 300;
 

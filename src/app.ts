@@ -4,9 +4,9 @@ import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Settings } from './settings';
 import { sound } from './sound';
-import { bump, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
+import { bump, dailyStreak, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
-import { DIFFICULTIES, ISLAND_SIZES, WORLD_GEN, makeWorld, randomSeed, seedFromText } from './config';
+import { DIFFICULTIES, ISLAND_SIZES, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
 import {
   fmtTime,
   initGame,
@@ -250,6 +250,15 @@ async function renderHome() {
       ? worlds.map(worldCard)
       : [node('p', { class: 'empty', textContent: 'No worlds yet. Create your first one!' })]),
   );
+  const today = worlds.find((m) => m.id === `daily-${todayKey()}`);
+  const daily = el('h-daily');
+  daily.textContent = !today
+    ? '📅 Daily island'
+    : today.status === 'won'
+      ? `📅 Daily island · cleared ${fmtTime(today.elapsedMs)}`
+      : today.status === 'lost'
+        ? '📅 Daily island · lost'
+        : `📅 Daily island · ${today.total ? Math.floor((today.cleared / today.total) * 100) : 0}%`;
   const cleared = (await listTrophies()).length;
   el('h-trophies').textContent = cleared ? `🏆 Finished islands (${cleared})` : '🏆 Finished islands';
   const last = worlds.find((m) => m.status === 'playing');
@@ -437,6 +446,8 @@ async function renderStats() {
     tile('Areas tidied', n(stats.chunksTidied)),
     tile('Oracles found', n(stats.oraclesFound)),
     tile('Oracles used', n(stats.oraclesUsed)),
+    tile('Daily islands cleared', n(Object.keys(stats.dailyWins).length)),
+    tile('Daily streak', dailyStreak() ? `🔥 ${dailyStreak()}` : '–'),
     tile('Restarts', n(stats.restarts)),
   );
 
@@ -477,6 +488,38 @@ async function renderStats() {
 async function openStats() {
   await renderStats();
   show('stats');
+}
+
+// --- Daily island -----------------------------------------------------------------------
+
+/** One island per UTC day, the same for everyone. Continues today's island if you already started it. */
+async function openDaily() {
+  const key = todayKey();
+  const id = `daily-${key}`;
+  if (!(await getWorld(id))) {
+    const now = Date.now();
+    await saveWorld(
+      {
+        id,
+        name: `Daily island · ${key}`,
+        config: dailyConfig(key),
+        status: 'playing',
+        cleared: 0,
+        total: 0,
+        points: 0,
+        farthest: 0,
+        elapsedMs: 0,
+        cam: null,
+        thumb: null,
+        worldgen: WORLDGEN_VERSION,
+        createdAt: now,
+        updatedAt: now,
+      },
+      new Int32Array(0),
+    );
+    bump('worldsCreated');
+  }
+  await openWorld(id);
 }
 
 // --- Pause menu -------------------------------------------------------------------------
@@ -839,6 +882,7 @@ export async function start() {
   registerServiceWorker(() => ($update.hidden = false));
 
   el('h-new').addEventListener('click', () => void openCreator());
+  el('h-daily').addEventListener('click', () => void openDaily());
   el('h-stats').addEventListener('click', () => void openStats());
   el('stats-back').addEventListener('click', () => void goHome());
   el('stats-reset').addEventListener('click', async () => {
