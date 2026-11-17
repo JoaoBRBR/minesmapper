@@ -1393,3 +1393,22 @@ button.small {
 @media (prefers-reduced-motion: reduce) {
   #hearts.last .ic:first-child, #vignette { animation: none; }
 }
+
+/* Every menu and dialog scrolls by itself when it is taller than the screen */
+#creator > .panel,
+#stats-screen > .panel {
+  max-height: calc(100vh - 108px);
+  max-height: calc(100dvh - 108px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+.overlay > .dialog {
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
