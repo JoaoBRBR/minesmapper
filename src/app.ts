@@ -20,6 +20,7 @@ import {
   startOracleTargeting,
   thumbnail,
 } from './game';
+import { initMusic } from './musicBridge';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
@@ -589,6 +590,12 @@ function bindSettings() {
       if (b?.dataset.v) setSetting(g.dataset.settingChoice as 'numberStyle', b.dataset.v as Settings['numberStyle']);
     });
   }
+  // Sliders (music volume): 0-100 in the UI, 0-1 in the setting.
+  const ranges = [...document.querySelectorAll<HTMLInputElement>('input[data-setting-range]')];
+  const syncRanges = () => ranges.forEach((r) => (r.value = String(Math.round(settings.musicVolume * 100))));
+  syncRanges();
+  onSettingsChange(syncRanges);
+  for (const r of ranges) r.addEventListener('input', () => setSetting('musicVolume', Number(r.value) / 100));
   if (!vibrationSupported) {
     for (const i of inputs.filter((x) => x.dataset.setting === 'vibration')) {
       i.disabled = true;
@@ -620,6 +627,7 @@ export async function start() {
   await init();
   await loadStats();
   initTheme();
+  initMusic();
   requestPersistence();
   initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
   bindCreator();

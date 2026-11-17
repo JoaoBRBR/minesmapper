@@ -778,3 +778,21 @@ input:not([type]) {
 #stats-since {
   margin: 0 0 10px;
 }
+
+/* ---- Range rows (music volume) ---- */
+.range-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--edge-soft);
+}
+.range-row b {
+  font: 700 15px var(--serif);
+}
+.range-row input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.menu-toggles .range-row {
+  padding: 8px 0;
+}

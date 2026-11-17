@@ -1,6 +1,8 @@
 // Per-device preferences, kept in localStorage (a convenience, not game state).
 
 export type NumberStyle = 'engraved' | 'handwritten' | 'colored';
+export type MusicStyle = 'dawn' | 'cloister' | 'deep';
+const MUSIC_STYLES: MusicStyle[] = ['dawn', 'cloister', 'deep'];
 const NUMBER_STYLES: NumberStyle[] = ['engraved', 'handwritten', 'colored'];
 
 export interface Settings {
@@ -13,10 +15,14 @@ export interface Settings {
   darkPaper: boolean;
   /** How the numbers on the map look. */
   numberStyle: NumberStyle;
+  /** Background music on/off, its style, and its volume (0 to 1). */
+  music: boolean;
+  musicStyle: MusicStyle;
+  musicVolume: number;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved' };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6 };
 
 function load(): Settings {
   try {
@@ -33,6 +39,12 @@ function load(): Settings {
         : raw.coloredNumbers === true
           ? 'colored'
           : DEFAULTS.numberStyle,
+      music: typeof raw.music === 'boolean' ? raw.music : DEFAULTS.music,
+      musicStyle: MUSIC_STYLES.includes(raw.musicStyle) ? raw.musicStyle : DEFAULTS.musicStyle,
+      musicVolume:
+        typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
+          ? raw.musicVolume
+          : DEFAULTS.musicVolume,
     };
   } catch {
     return { ...DEFAULTS };

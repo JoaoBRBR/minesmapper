@@ -3,6 +3,7 @@ import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CL
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
+import { flavorOf, musicArea, musicChunk, musicFlag, musicMood, musicWin } from './musicBridge';
 import { bump, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
 import type { CamState, Status, WorldConfig } from './storage';
@@ -73,6 +74,7 @@ let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
 let lastVisuals = visualsVersion;
+let lastMoodCheck = 0;
 /** Phones and touch screens get a compact top bar; the rest lives in the menu. */
 const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
@@ -300,6 +302,12 @@ function updateHud(now: number) {
   setText($oracle, `✨ Oracle ×${oracles}`);
   $oracle.setAttribute('aria-pressed', String(oracleMode));
   canvas.classList.toggle('targeting', oracleMode);
+  if (now - lastMoodCheck > 1500) {
+    // The music follows the biome in the middle of the screen.
+    lastMoodCheck = now;
+    const mid = wd.view(Math.floor(cam.cx), Math.floor(cam.cy), 1, 1);
+    musicMood(flavorOf(mid[0], mid[1]));
+  }
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
   updateBanner(now);
@@ -505,6 +513,12 @@ function feedback(
   bump('cellsCleared', revealed);
   bump('flagsPlaced', flagDelta);
 
+  // Music: the biome under the action colours the notes (desert, ice, ...).
+  const here = wd.view(x, y, 1, 1);
+  const flavor = flavorOf(here[0], here[1]);
+  if (flagDelta > 0) musicFlag(flavor);
+  if (revealed >= 5) musicArea(revealed, flavor);
+
   // Cells that opened: ripple outward from the click (breadth-first depth = delay).
   let rippleMs = 0;
   if (revealed > 0 && log.length >= 3) {
@@ -534,6 +548,7 @@ function feedback(
     }
   } else if (!before.won && wd.is_won()) {
     bump('wins');
+    musicWin();
     if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, startedAt === null ? 0 : now - startedAt);
     sound.win();
     haptics.win();
@@ -556,6 +571,11 @@ function feedback(
   const cleaned = wd.take_clean_log();
   if (cleaned.length > 0) {
     bump('chunksTidied', cleaned.length / 2);
+    {
+      const half = wd.clean_chunk_size() / 2;
+      const mid = wd.view(Math.floor(cleaned[0] * wd.clean_chunk_size() + half), Math.floor(cleaned[1] * wd.clean_chunk_size() + half), 1, 1);
+      musicChunk(flavorOf(mid[0], mid[1]));
+    }
     sound.clean();
     haptics.clean();
     if (animate) {

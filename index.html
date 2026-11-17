@@ -83,6 +83,22 @@
           <input type="checkbox" id="m-vibration" data-setting="vibration" />
         </label>
         <label class="switch">
+          <b>Music</b>
+          <input type="checkbox" id="m-music" data-setting="music" />
+        </label>
+        <div class="switch choice-row">
+          <b>Music style</b>
+          <div class="seg" data-setting-choice="musicStyle" id="m-musicStyle">
+            <button type="button" data-v="dawn">Dawn</button>
+            <button type="button" data-v="cloister">Cloister</button>
+            <button type="button" data-v="deep">Deep</button>
+          </div>
+        </div>
+        <div class="range-row">
+          <b>Music volume</b>
+          <input type="range" min="0" max="100" step="1" id="m-musicVolume" data-setting-range="musicVolume" aria-label="Music volume" />
+        </div>
+        <label class="switch">
           <b>Dark paper</b>
           <input type="checkbox" id="m-darkPaper" data-setting="darkPaper" />
         </label>
@@ -126,6 +142,24 @@
           <input type="checkbox" id="s-vibration" data-setting="vibration" />
           <small id="s-vibration-hint">Short buzzes for flags, mines and wins.</small>
         </label>
+        <label class="switch">
+          <b>Music</b>
+          <input type="checkbox" id="s-music" data-setting="music" />
+          <small>A calm, generative soundtrack that answers your actions.</small>
+        </label>
+        <div class="switch choice-row">
+          <b>Music style</b>
+          <div class="seg" data-setting-choice="musicStyle" id="s-musicStyle">
+            <button type="button" data-v="dawn">Dawn</button>
+            <button type="button" data-v="cloister">Cloister</button>
+            <button type="button" data-v="deep">Deep</button>
+          </div>
+          <small>Dawn: lo-fi · Cloister: classical · Deep: ambient water</small>
+        </div>
+        <div class="range-row">
+          <b>Music volume</b>
+          <input type="range" min="0" max="100" step="1" id="s-musicVolume" data-setting-range="musicVolume" aria-label="Music volume" />
+        </div>
         <label class="switch">
           <b>Dark paper</b>
           <input type="checkbox" id="s-darkPaper" data-setting="darkPaper" />
