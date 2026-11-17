@@ -14,7 +14,7 @@ use noise::hash;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
-use terrain::{Terrain, B_OCEAN, CH};
+use terrain::{Terrain, B_OCEAN, CH, SEA};
 use wasm_bindgen::prelude::*;
 
 /// Terrain chunks kept in memory before the cache is flushed.
@@ -213,6 +213,31 @@ impl World {
     /// Playable land cells (0 in endless mode).
     pub fn land_total(&self) -> u32 {
         self.island.as_ref().map_or(0, |i| i.land_count)
+    }
+
+    /// The island's whole terrain for 3D viewing: `size * size` cells, row-major from the
+    /// north-west corner, two bytes each: `[biome, elevation]` (elevation 0..=255, sea level is
+    /// about 107). Land cut off from the island is flattened into shallow water. Empty in
+    /// endless mode. Depends only on the seed, never on progress.
+    pub fn island_snapshot(&self) -> Vec<u8> {
+        let Some(island) = &self.island else { return Vec::new() };
+        let h = island.half();
+        let n = (2 * h) as usize;
+        let mut out = Vec::with_capacity(n * n * 2);
+        for y in -h..h {
+            for x in -h..h {
+                let e = self.terrain.elevation(x, y);
+                let (mut biome, _) = self.terrain.cell(x, y);
+                let mut height = e;
+                if e >= SEA && !island.contains(x, y) {
+                    biome = B_OCEAN;
+                    height = SEA - 0.02;
+                }
+                out.push(biome);
+                out.push((height.clamp(0.0, 1.0) * 255.0) as u8);
+            }
+        }
+        out
     }
 
     /// Playable cells that are inner-lake water (0 in endless mode).
@@ -1413,5 +1438,30 @@ mod tests {
         let w = World::new_island(5, 192, 0.12, 0.2);
         // Safe cells to clear include any lake cells (they are playable).
         assert_eq!(w.safe_total(), w.land_total() - w.mines_total());
+    }
+
+    #[test]
+    fn island_snapshot_describes_every_cell() {
+        let w = World::new_island(9, 96, 0.15, 0.28);
+        let snap = w.island_snapshot();
+        assert_eq!(snap.len(), 96 * 96 * 2);
+        let sea = (SEA * 255.0) as u8;
+        let mut land = 0;
+        for y in -48..48i32 {
+            for x in -48..48i32 {
+                let i = (((y + 48) * 96 + (x + 48)) * 2) as usize;
+                let (biome, height) = (snap[i], snap[i + 1]);
+                if w.is_playable(x, y) && biome > B_OCEAN {
+                    land += 1;
+                    assert!(height >= sea, "land below sea level at ({x},{y})");
+                }
+                if biome <= B_OCEAN {
+                    assert!(height <= sea + 1, "water above sea level at ({x},{y})");
+                }
+            }
+        }
+        assert!(land > 1000);
+        // Endless worlds have no island to show.
+        assert!(World::new(1, 0.15, 0.15, 0.0).island_snapshot().is_empty());
     }
 }

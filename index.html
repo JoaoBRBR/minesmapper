@@ -42,6 +42,7 @@
       <div id="banner-title" class="dialog-title"></div>
       <small id="banner-sub"></small>
       <div class="row">
+        <button id="b-3d" class="primary" hidden>🌍 See it in 3D</button>
         <button id="b-restart" class="primary">↻ Restart</button>
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
@@ -69,6 +70,7 @@
         </div>
         <button id="m-center">⌖ Center on the start</button>
         <button id="m-oracle" hidden>✨ Oracle</button>
+        <button id="m-3d" hidden>🌍 View the island in 3D</button>
         <div class="menu-toggles">
         <label class="switch">
           <b>Reveal animations</b>
@@ -179,6 +181,11 @@
           <input type="checkbox" id="s-chunks" data-setting="chunkBorders" />
           <small>Outlines the 16×16 cleanup chunks and marks finished ones. Handy for testing.</small>
         </label>
+        <label class="switch">
+          <b>3D view for every island</b>
+          <input type="checkbox" id="s-always3d" data-setting="always3d" />
+          <small>Testing: show the 3D button even for islands you have not cleared yet.</small>
+        </label>
         <div class="stack"><button id="s-close" class="primary">Done</button></div>
       </div>
     </div>
@@ -193,6 +200,7 @@
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-trophies">🏆 Finished islands</button>
           <button id="h-stats">📊 Stats</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>
           <button id="h-install" hidden>⬇ Install app</button>
@@ -204,6 +212,35 @@
         <div id="worlds"></div>
       </div>
     </main>
+
+    <!-- Finished islands -->
+    <section id="trophies" class="screen" hidden>
+      <div class="panel">
+        <h1>Finished islands</h1>
+        <p class="hint">Every island you have cleared. Open one to see it in 3D.</p>
+        <div id="trophy-list"></div>
+        <div class="row actions">
+          <button id="trophies-back" class="primary">← Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3D island viewer -->
+    <div id="viewer" hidden>
+      <div id="viewer-stage"></div>
+      <div class="viewer-bar">
+        <div class="viewer-title">
+          <b id="viewer-title"></b>
+          <small id="viewer-sub"></small>
+        </div>
+        <div class="row">
+          <button id="viewer-rotate" aria-pressed="true">⟳ Rotate</button>
+          <button id="viewer-close" class="primary">✕ Close</button>
+        </div>
+      </div>
+      <div class="viewer-hint">Drag to turn · scroll or pinch to zoom</div>
+      <div id="viewer-msg" role="status" hidden></div>
+    </div>
 
     <!-- Stats -->
     <section id="stats-screen" class="screen" hidden>

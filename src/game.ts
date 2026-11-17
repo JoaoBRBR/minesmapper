@@ -13,6 +13,8 @@ export interface GameCallbacks {
   onChange(): void;
   onMenu(): void;
   onRestart(): void;
+  /** The player wants to see the island in 3D (win dialog button). */
+  onView3D(): void;
 }
 
 export interface Snapshot {
@@ -43,6 +45,7 @@ const $menu = el<HTMLButtonElement>('menu');
 const $oracle = el<HTMLButtonElement>('oracle');
 const $menuBadge = el('menu-badge');
 const $banner = el('banner');
+const $b3d = el<HTMLButtonElement>('b-3d');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
 
@@ -63,6 +66,8 @@ let dirty = true;
 // Timer: starts on the first reveal, stops on win/loss.
 let startedAt: number | null = null;
 let endedAt: number | null = null;
+/** When the end dialog last appeared. Taps right after are ignored, so a fast tap on the map can't hit a button. */
+let bannerShownAt = 0;
 let bannerKey = '';
 let bannerDismissed = false;
 
@@ -147,6 +152,14 @@ export function snapshot(): Snapshot {
 export function thumbnail(): string | null {
   if (!w || !h) return null;
   try {
+    // A cleared island is remembered by a portrait of the whole thing.
+    if (world?.is_island() && world.is_won()) {
+      const px = 280;
+      const portrait = document.createElement('canvas');
+      portrait.width = portrait.height = px;
+      draw(portrait.getContext('2d')!, world, { cx: 0.5, cy: 0.5, zoom: px / world.island_size() }, px, px, 'review');
+      return portrait.toDataURL('image/jpeg', 0.78);
+    }
     const tw = 200;
     const th = Math.round((tw * h) / w);
     const c = document.createElement('canvas');
@@ -265,7 +278,11 @@ function updateBanner(now: number) {
   }
   // Give the loss/win animation time to play before the dialog appears.
   const ready = !endFx || now - endFx.t0 >= BANNER_DELAY_MS[endFx.kind];
-  $banner.hidden = key === '' || bannerDismissed || !ready;
+  const hide = key === '' || bannerDismissed || !ready;
+  if ($banner.hidden && !hide) bannerShownAt = now;
+  $banner.hidden = hide;
+  // 3D view: after winning an island (and, while testing, after a loss too).
+  $b3d.hidden = !(wd.is_island() && (key === 'won' || (key === 'lost' && settings.always3d)));
 }
 
 function updateHud(now: number) {
@@ -692,7 +709,7 @@ function toggleFlagMode() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (!active || e.target instanceof HTMLInputElement || !el('settings').hidden) return;
+  if (!active || e.target instanceof HTMLInputElement || !el('settings').hidden || !el('viewer').hidden) return;
   if (e.key === 'f' || e.key === 'F') toggleFlagMode();
   if (e.key === 'c' || e.key === 'C' || e.key === 'Home') recenter();
   if (e.key === 'o' || e.key === 'O') toggleOracleMode();
@@ -705,12 +722,19 @@ $mode.addEventListener('click', toggleFlagMode);
 $home.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
 $oracle.addEventListener('click', toggleOracleMode);
-el('b-restart').addEventListener('click', () => cb.onRestart());
-el('b-menu').addEventListener('click', () => cb.onMenu());
-el('b-look').addEventListener('click', () => {
-  bannerDismissed = true;
-  $banner.hidden = true;
-});
+const settled = (fn: () => void) => () => {
+  if (performance.now() - bannerShownAt > 500) fn();
+};
+el('b-restart').addEventListener('click', settled(() => cb.onRestart()));
+el('b-menu').addEventListener('click', settled(() => cb.onMenu()));
+$b3d.addEventListener('click', settled(() => cb.onView3D()));
+el('b-look').addEventListener(
+  'click',
+  settled(() => {
+    bannerDismissed = true;
+    $banner.hidden = true;
+  }),
+);
 
 // Test hook (dev server only): lets browser tests set up positions without hours of play.
 if (import.meta.env.DEV) {

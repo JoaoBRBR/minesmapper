@@ -19,10 +19,12 @@ export interface Settings {
   music: boolean;
   musicStyle: MusicStyle;
   musicVolume: number;
+  /** Testing: allow the 3D view for every island, not only cleared ones. */
+  always3d: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6 };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, always3d: true };
 
 function load(): Settings {
   try {
@@ -45,6 +47,7 @@ function load(): Settings {
         typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
           ? raw.musicVolume
           : DEFAULTS.musicVolume,
+      always3d: typeof raw.always3d === 'boolean' ? raw.always3d : DEFAULTS.always3d,
     };
   } catch {
     return { ...DEFAULTS };

@@ -33,7 +33,7 @@ const isTidy = (b: number) => (b & (ST_MASK | ST_CLEAN)) === (ST_REVEALED | ST_C
 type RGB = [number, number, number];
 
 // Order mirrors the B_* ids in crate/src/terrain.rs.
-const BIOME_COLORS: RGB[] = [
+export const BIOME_COLORS: RGB[] = [
   [30, 70, 118], // deep ocean
   [54, 118, 166], // ocean
   [226, 212, 160], // beach

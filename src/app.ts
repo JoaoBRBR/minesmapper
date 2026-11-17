@@ -36,12 +36,13 @@ import {
   type WorldMeta,
 } from './storage';
 
-type Screen = 'home' | 'creator' | 'stats' | 'game';
+type Screen = 'home' | 'creator' | 'stats' | 'trophies' | 'game';
 
 const el = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 const $homeScreen = el('home-screen');
 const $creator = el('creator');
 const $statsScreen = el('stats-screen');
+const $trophies = el('trophies');
 const $pause = el('pause');
 const $worlds = el('worlds');
 const $continue = el<HTMLButtonElement>('h-continue');
@@ -58,6 +59,7 @@ function show(next: Screen) {
   $homeScreen.hidden = next !== 'home';
   $creator.hidden = next !== 'creator';
   $statsScreen.hidden = next !== 'stats';
+  $trophies.hidden = next !== 'trophies';
   $pause.hidden = true;
   setActive(next === 'game');
   if (next === 'game') startPlay();
@@ -167,6 +169,11 @@ function describe(m: WorldMeta) {
   return { line1: `${mode} · ${c.difficulty}`, line2: `${progress}${time}` };
 }
 
+/** Islands can be viewed in 3D once cleared (or any time while the testing switch is on). */
+function canView3D(m: WorldMeta) {
+  return m.config.mode === 'island' && (m.status === 'won' || settings.always3d);
+}
+
 function worldCard(m: WorldMeta) {
   const { line1, line2 } = describe(m);
   const badge =
@@ -198,6 +205,10 @@ function worldCard(m: WorldMeta) {
       await renderHome();
     },
   } as Partial<HTMLButtonElement>);
+  const view3d = canView3D(m)
+    ? node('button', { textContent: '🌍 3D', title: 'See the island in 3D', onclick: () => void openViewer(m) })
+    : null;
+  const buttons: HTMLElement[] = [primary, restart, ...(view3d ? [view3d] : []), del];
   // Lost worlds: make Restart the main action.
   if (m.status === 'lost') restart.classList.add('primary');
 
@@ -213,7 +224,7 @@ function worldCard(m: WorldMeta) {
       node('div', { class: 'meta', textContent: line2 }),
       node('div', { class: 'meta dim', textContent: `Seed ${m.config.seedText} · ${ago(m.updatedAt)}` }),
     ),
-    node('div', { class: 'card-actions' }, primary, restart, del),
+    node('div', { class: 'card-actions' }, ...buttons),
   );
 }
 
@@ -224,6 +235,8 @@ async function renderHome() {
       ? worlds.map(worldCard)
       : [node('p', { class: 'empty', textContent: 'No worlds yet. Create your first one!' })]),
   );
+  const cleared = worlds.filter((m) => m.config.mode === 'island' && m.status === 'won').length;
+  el('h-trophies').textContent = cleared ? `🏆 Finished islands (${cleared})` : '🏆 Finished islands';
   const last = worlds.find((m) => m.status === 'playing');
   $continue.hidden = !last;
   if (last) {
@@ -237,6 +250,97 @@ async function goHome() {
   current = null;
   show('home');
   await renderHome();
+}
+
+// --- 3D viewer and finished islands ------------------------------------------------------
+
+let viewer: { dispose(): void; setAutoRotate(on: boolean): void } | null = null;
+let viewerToken = 0;
+let autoRotate = true;
+const $viewer = el('viewer');
+
+async function openViewer(meta: WorldMeta) {
+  if (meta.config.mode !== 'island') return;
+  closeViewer();
+  const token = viewerToken;
+  const c = meta.config;
+  $viewer.hidden = false;
+  el('viewer-title').textContent = meta.name;
+  el('viewer-sub').textContent = `${
+    meta.status === 'won' ? `🏆 Cleared in ${fmtTime(meta.elapsedMs)}` : 'Island in progress'
+  } · ${c.size}×${c.size} · ${c.difficulty}`;
+  const msg = el('viewer-msg');
+  msg.hidden = false;
+  msg.textContent = 'Raising the island…';
+  try {
+    // The terrain depends only on the seed, so it can be rebuilt from the saved settings.
+    const world = makeWorld(c);
+    const cells = world.island_snapshot();
+    const size = world.island_size();
+    world.free();
+    const mod = await import('./viewer3d');
+    if (token !== viewerToken) return; // closed while loading
+    viewer = mod.openIsland(el('viewer-stage'), { size, cells });
+    viewer.setAutoRotate(autoRotate);
+    msg.hidden = true;
+  } catch (err) {
+    console.warn('3D view failed', err);
+    msg.textContent = 'The 3D view is not available on this device.';
+  }
+}
+
+function closeViewer() {
+  viewerToken++;
+  viewer?.dispose();
+  viewer = null;
+  $viewer.hidden = true;
+}
+
+function bindViewer() {
+  el('viewer-close').addEventListener('click', closeViewer);
+  const rotate = el<HTMLButtonElement>('viewer-rotate');
+  rotate.addEventListener('click', () => {
+    autoRotate = !autoRotate;
+    rotate.setAttribute('aria-pressed', String(autoRotate));
+    viewer?.setAutoRotate(autoRotate);
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$viewer.hidden) closeViewer();
+  });
+  el('h-trophies').addEventListener('click', () => void openTrophies());
+  el('trophies-back').addEventListener('click', () => void goHome());
+}
+
+async function openTrophies() {
+  const wins = (await listWorlds()).filter((m) => m.config.mode === 'island' && m.status === 'won');
+  el('trophy-list').replaceChildren(
+    ...(wins.length
+      ? wins.map((m) => {
+          const c = m.config;
+          const thumb = node('div', { class: 'thumb' });
+          if (m.thumb) thumb.style.backgroundImage = `url(${m.thumb})`;
+          return node(
+            'article',
+            { class: 'card won' },
+            thumb,
+            node(
+              'div',
+              { class: 'info' },
+              node('div', { class: 'name' }, m.name, node('span', { class: 'badge won', textContent: '🏝 Cleared' })),
+              node('div', { class: 'meta', textContent: `${c.size}×${c.size} · ${c.difficulty} · ${fmtTime(m.elapsedMs)}` }),
+              node('div', { class: 'meta dim', textContent: `Seed ${c.seedText} · ${ago(m.updatedAt)}` }),
+            ),
+            node(
+              'div',
+              { class: 'card-actions' },
+              node('button', { class: 'primary', textContent: '🌍 View in 3D', onclick: () => void openViewer(m) }),
+              node('button', { textContent: '👁 Open map', onclick: () => void openWorld(m.id) }),
+            ),
+          );
+        })
+      : [node('p', { class: 'empty', textContent: 'No finished islands yet. Clear one to hang it here!' })]),
+  );
+  show('trophies');
 }
 
 // --- Stats screen -----------------------------------------------------------------------
@@ -343,6 +447,8 @@ function syncMenu() {
   const oracle = el<HTMLButtonElement>('m-oracle');
   oracle.hidden = oracles === 0;
   oracle.textContent = `✨ Use an oracle (×${oracles})`;
+  const island = current?.config.mode === 'island';
+  el('m-3d').hidden = !(island && (snapshot().status === 'won' || settings.always3d));
 }
 
 function openPause() {
@@ -363,6 +469,13 @@ function bindGameMenu() {
   el('m-center').addEventListener('click', () => {
     recenterView();
     closePause();
+  });
+  el('m-3d').addEventListener('click', () => {
+    closePause();
+    if (current) {
+      const s = snapshot();
+      void openViewer({ ...current, status: s.status, elapsedMs: s.elapsedMs });
+    }
   });
   el('m-oracle').addEventListener('click', () => {
     closePause();
@@ -629,10 +742,20 @@ export async function start() {
   initTheme();
   initMusic();
   requestPersistence();
-  initGame({ onChange: scheduleSave, onMenu: openPause, onRestart: () => void restartCurrent() });
+  initGame({
+    onChange: scheduleSave,
+    onMenu: openPause,
+    onRestart: () => void restartCurrent(),
+    onView3D: () => {
+      if (!current) return;
+      const s = snapshot();
+      void openViewer({ ...current, status: s.status, elapsedMs: s.elapsedMs });
+    },
+  });
   bindCreator();
   bindSettings();
   bindGameMenu();
+  bindViewer();
   setupInstall(el<HTMLButtonElement>('h-install'), el('ios-hint'));
   const $update = el('update');
   el('update-reload').addEventListener('click', () => location.reload());
