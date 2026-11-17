@@ -24,7 +24,7 @@ import {
   thumbnail,
 } from './game';
 import { initMusic } from './musicBridge';
-import { LEVELS, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
+import { LEVELS, getLevel, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
@@ -119,6 +119,12 @@ function saveCurrent(withThumb = false): Promise<void> {
 async function openWorld(id: string) {
   const [meta, state] = await Promise.all([getWorld(id), getState(id)]);
   if (!meta) return;
+  // A level's design may have changed since this was saved: start it over on the current one.
+  const def = getLevel(meta.config.level);
+  if (def && JSON.stringify(meta.config) !== JSON.stringify(levelConfig(def))) {
+    await saveWorld({ ...meta, config: levelConfig(def), status: 'playing', cleared: 0, total: 0, elapsedMs: 0, cam: null, thumb: null }, new Int32Array(0));
+    return openWorld(id);
+  }
   current = meta;
   loadWorld(meta.config, state, meta.elapsedMs, meta.cam);
   show('game');
