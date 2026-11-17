@@ -840,41 +840,32 @@ function endPointer(e: PointerEvent, cancelled: boolean) {
   handleTap(e.clientX, e.clientY, e.button === 2);
 }
 
-// A quick second tap on ground you have already discovered zooms in (or back out). Taps on hidden
-// cells always act at once, so double-tapping never causes a surprise reveal. A single tap on a
-// discovered cell (a chord) waits a moment to see whether a second one follows.
-const DOUBLE_TAP_MS = 280;
-let pendingTap: { x: number; y: number; timer: number } | null = null;
+// A quick second tap on ground you have already discovered zooms in (or back out). Taps always act
+// at once, so chording stays instant; the second tap of a pair is simply used for the zoom, and
+// double-tapping a hidden cell never zooms (it just reveals, then the cell is discovered).
+const DOUBLE_TAP_MS = 300;
+let lastDiscoveredTap: { x: number; y: number; t: number } | null = null;
 
 function cancelPendingTap() {
-  if (pendingTap) clearTimeout(pendingTap.timer);
-  pendingTap = null;
+  lastDiscoveredTap = null;
 }
 
 function handleTap(px: number, py: number, secondary: boolean) {
   const plain = !secondary && !flagMode && !oracleMode && !iceMode && !progressView && !!world;
   const [cx, cy] = plain ? screenToCell(cam, w, h, px, py) : [0, 0];
   if (!plain || !isChordable(cx, cy)) {
-    const wasWaiting = pendingTap;
-    cancelPendingTap();
-    if (wasWaiting) activate(wasWaiting.x, wasWaiting.y, false);
+    lastDiscoveredTap = null;
     activate(px, py, secondary);
     return;
   }
-  if (pendingTap && Math.hypot(px - pendingTap.x, py - pendingTap.y) < 36) {
-    cancelPendingTap();
+  const now = performance.now();
+  if (lastDiscoveredTap && now - lastDiscoveredTap.t < DOUBLE_TAP_MS && Math.hypot(px - lastDiscoveredTap.x, py - lastDiscoveredTap.y) < 36) {
+    lastDiscoveredTap = null;
     doubleTapZoom(cx, cy);
     return;
   }
-  const waiting = pendingTap;
-  cancelPendingTap();
-  if (waiting) activate(waiting.x, waiting.y, false);
-  const timer = window.setTimeout(() => {
-    const p = pendingTap;
-    pendingTap = null;
-    if (p) activate(p.x, p.y, false);
-  }, DOUBLE_TAP_MS);
-  pendingTap = { x: px, y: py, timer };
+  lastDiscoveredTap = { x: px, y: py, t: now };
+  activate(px, py, false); // a chord happens right away when the flags match the number
 }
 
 function doubleTapZoom(cx: number, cy: number) {
