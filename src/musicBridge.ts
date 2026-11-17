@@ -12,7 +12,8 @@ let engine: Engine | null = null;
 let loading: Promise<void> | null = null;
 let gesture = false;
 let audioCtx: AudioContext | null = null;
-let lastFail = 0;
+/** When the last start attempt failed (never, to begin with); used to pause retries briefly. */
+let lastFail = -Infinity;
 let appliedStyle = settings.musicStyle;
 let appliedVolume = settings.musicVolume;
 
