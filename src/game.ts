@@ -43,6 +43,7 @@ const canvas = el<HTMLCanvasElement>('map');
 const ctx = canvas.getContext('2d')!;
 const $hud = el('hud');
 const $hearts = el('hearts');
+const $vignette = el('vignette');
 const $score = el('score');
 const $timer = el('timer');
 const $pos = el('pos');
@@ -249,7 +250,10 @@ export function setActive(on: boolean) {
   active = on;
   canvas.hidden = !on;
   $hud.hidden = !on;
-  if (!on) $fab.hidden = true;
+  if (!on) {
+    $fab.hidden = true;
+    $vignette.hidden = true;
+  }
   if (!on) {
     $banner.hidden = true;
     bannerKey = '';
@@ -445,9 +449,14 @@ function updateHud(now: number) {
   }
   const heartsMax = wd.hearts_max();
   $hearts.hidden = heartsMax === 0;
+  if (heartsMax === 0) $vignette.hidden = true;
   if (heartsMax) {
     const left = Math.max(0, heartsMax - wd.mistakes());
     setText($hearts, '♥'.repeat(left) + '♡'.repeat(heartsMax - left));
+    // one heart left (in a game that began with more): the heart jumps and the edges blush
+    const tense = heartsMax > 1 && left === 1 && !wd.is_game_over() && !wd.is_won();
+    $hearts.classList.toggle('last', tense);
+    $vignette.hidden = !tense;
   }
   const oracles = wd.powerups_available();
   if (oracles === 0 && oracleMode) oracleMode = false;
@@ -669,7 +678,7 @@ function deny(x: number, y: number) {
 }
 
 function drawShockwave(now: number, t0: number, origin: [number, number]) {
-  const t = (now - t0) / 700;
+  const t = Math.max(0, (now - t0) / 700);
   if (t >= 1) return;
   const sx = (origin[0] + 0.5 - cam.cx) * cam.zoom + w / 2;
   const sy = (origin[1] + 0.5 - cam.cy) * cam.zoom + h / 2;

@@ -861,7 +861,8 @@ impl World {
         }
         if self.is_mine(x, y) {
             self.exploded.insert((x, y));
-            if self.exploded.len() as u32 > self.hearts_max {
+            // hearts off (0) means the first mine ends the game; with hearts, losing the last one does
+            if self.exploded.len() as u32 >= self.hearts_max.max(1) {
                 self.game_over = true;
             }
             return 0;
@@ -1744,7 +1745,7 @@ mod tests {
     }
 
     #[test]
-    fn hearts_allow_mistakes_before_losing() {
+    fn losing_every_heart_ends_the_game() {
         let mut w = World::new_island(5, 96, 0.2, 0.3, 2);
         w.set_hearts(2);
         w.reveal(0, 0);
@@ -1760,9 +1761,7 @@ mod tests {
         w.reveal_unchecked(mines[0].0, mines[0].1);
         assert_eq!(w.mistakes(), 1, "tapping the same mine twice costs nothing");
         w.reveal_unchecked(mines[1].0, mines[1].1);
-        assert!(!w.is_game_over());
-        w.reveal_unchecked(mines[2].0, mines[2].1);
-        assert!(w.is_game_over());
+        assert!(w.is_game_over(), "losing the last heart ends the game");
     }
 
     #[test]

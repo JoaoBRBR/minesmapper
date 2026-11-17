@@ -990,6 +990,7 @@ input:not([type]) {
   position: absolute;
   top: 3px;
   left: 3px;
+  transform: translateX(46px);
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -998,7 +999,7 @@ input:not([type]) {
   transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 #fab[aria-pressed='true'] .sw-knob {
-  transform: translateX(46px);
+  transform: translateX(0);
 }
 #fab .sw-ico {
   position: absolute;
@@ -1018,8 +1019,8 @@ input:not([type]) {
 }
 /* the side that is not active sits on the coloured track, so it is drawn light and faded */
 #fab .sw-ico .ic { filter: none; }
-#fab[aria-pressed='false'] .sw-r .ic,
-#fab[aria-pressed='true'] .sw-l .ic {
+#fab[aria-pressed='false'] .sw-l .ic,
+#fab[aria-pressed='true'] .sw-r .ic {
   filter: invert(1);
   opacity: 0.7;
 }
@@ -1348,4 +1349,47 @@ button.small {
   .back-fab .lbl {
     display: none;
   }
+}
+
+/* ---- Hearts: bigger at the bottom left on phones; the last one jumps and the edges blush ---- */
+@media (max-width: 720px), (pointer: coarse) {
+  #hearts {
+    position: fixed;
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(20px, env(safe-area-inset-bottom));
+    z-index: 13;
+    padding: 8px 14px;
+    border-width: 2px;
+    border-radius: 999px;
+    box-shadow: 0 4px 14px var(--shadow);
+  }
+  #hearts .ic {
+    width: 34px;
+    height: 34px;
+    vertical-align: middle;
+    margin: 0 2px;
+  }
+}
+@keyframes heart-jump {
+  0%, 55%, 100% { transform: translateY(0); }
+  18% { transform: translateY(-7px) scale(1.12); }
+  36% { transform: translateY(0) scale(0.96); }
+}
+#hearts.last .ic:first-child {
+  animation: heart-jump 1.1s ease-in-out infinite;
+}
+#vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(190, 30, 20, 0.34) 100%);
+  animation: vignette-pulse 2.4s ease-in-out infinite;
+}
+@keyframes vignette-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #hearts.last .ic:first-child, #vignette { animation: none; }
 }
