@@ -230,6 +230,8 @@ let styleId: MusicStyleId = 'dawn';
 let mood: Mood = 'default';
 let flagStep = 0;
 let lastMoodChange = 0;
+let volumeNow = 0.6;
+let duckTimer = 0;
 
 const style = () => STYLES[styleId];
 const secondsPerBeat = () => 60 / style().bpm;
@@ -353,6 +355,46 @@ export function chunk(flavor: Flavor) {
 }
 let lastChunkTick = -1e9;
 
+/**
+ * Hitting a mine: a slow, falling phrase in a minor colour, over a low minor chord, while the
+ * background quietens for a few seconds. Anything cheerful still waiting is dropped.
+ */
+export function lose() {
+  if (!repl?.scheduler.started) return;
+  const st = style();
+  const sched = repl.scheduler;
+  events = events.filter((e) => e.at < sched.lastEnd * TICKS); // keep only what is already underway
+  const at = nextSlot(BEAT);
+  // falling: fifth, fourth, minor third, second, tonic (natural-minor colour in every style)
+  const steps = [7, 5, 3, 2, 0];
+  steps.forEach((semi, i) => {
+    const last = i === steps.length - 1;
+    push('lose', at + i * BEAT, last ? BEAT * 3 : BEAT, {
+      ...voice('default', 'note'),
+      s: 'sine',
+      note: st.root + semi,
+      attack: 0.02,
+      decay: last ? 3 : 1.2,
+      release: last ? 3.5 : 1.4,
+      lpf: 1700,
+      gain: 0.3 - i * 0.02,
+      room: 0.8,
+    }, 'default');
+  });
+  // a low minor chord underneath
+  [st.root - 12, st.root - 9, st.root - 5].forEach((n) =>
+    push('lose', at, BEAT * 7, { ...voice('default', 'pad'), note: n, attack: 0.4, release: 3.2, lpf: 900, gain: 0.09 }, 'default'),
+  );
+  // let it breathe: the background drops, then returns
+  try {
+    getSuperdoughAudioController().output.destinationGain.gain.setTargetAtTime(volumeNow * 0.9 * 0.4, getAudioContext().currentTime, 0.15);
+  } catch {
+    /* audio not ready */
+  }
+  clearTimeout(duckTimer);
+  duckTimer = window.setTimeout(() => setVolume(volumeNow), 5500);
+}
+
 export function win() {
   if (!repl?.scheduler.started) return;
   phrase('win', nextSlot(TICKS / 2, lastChunkTick + TICKS * 0.5), 'default', true);
@@ -389,6 +431,7 @@ export function setStyle(next: MusicStyleId) {
 }
 
 export function setVolume(volume: number) {
+  volumeNow = volume;
   try {
     const ctx = getAudioContext();
     const gain = getSuperdoughAudioController().output.destinationGain.gain;

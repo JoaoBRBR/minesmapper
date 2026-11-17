@@ -80,4 +80,5 @@ export const musicFlag = (flavor: Flavor): boolean => live()?.flag(flavor) ?? fa
 export const musicArea = (cells: number, flavor: Flavor) => live()?.area(cells, flavor);
 export const musicChunk = (flavor: Flavor) => live()?.chunk(flavor);
 export const musicWin = () => live()?.win();
+export const musicLose = () => live()?.lose();
 export const musicMood = (mood: Mood) => live()?.setMood(mood);

@@ -3,7 +3,7 @@ import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CL
 import { haptics } from './haptics';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
-import { flavorOf, musicArea, musicChunk, musicFlag, musicMood, musicWin } from './musicBridge';
+import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
 import { bump, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
 import type { CamState, Status, WorldConfig } from './storage';
@@ -558,6 +558,7 @@ function feedback(
 
   if (!before.over && wd.is_game_over()) {
     bump('losses');
+    musicLose();
     sound.boom();
     haptics.boom();
     if (animate) {
