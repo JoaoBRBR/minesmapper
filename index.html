@@ -86,10 +86,15 @@
           <b>Dark paper</b>
           <input type="checkbox" id="m-darkPaper" data-setting="darkPaper" />
         </label>
-        <label class="switch">
-          <b>Colored numbers</b>
-          <input type="checkbox" id="m-coloredNumbers" data-setting="coloredNumbers" />
-        </label>
+        <div class="switch choice-row">
+          <b>Numbers</b>
+          <div class="seg" data-setting-choice="numberStyle" id="s-numberStyle">
+            <button type="button" data-v="engraved">Engraved</button>
+            <button type="button" data-v="handwritten">Written</button>
+            <button type="button" data-v="colored">Colored</button>
+          </div>
+          <small>Engraved like a printed map, hand-written, or the classic colours.</small>
+        </div>
         <label class="switch">
           <b>Show chunk borders</b>
           <input type="checkbox" id="m-chunkBorders" data-setting="chunkBorders" />
@@ -126,11 +131,14 @@
           <input type="checkbox" id="s-darkPaper" data-setting="darkPaper" />
           <small>A darker parchment, easier on the eyes at night.</small>
         </label>
-        <label class="switch">
-          <b>Colored numbers</b>
-          <input type="checkbox" id="s-coloredNumbers" data-setting="coloredNumbers" />
-          <small>Classic coloured digits instead of ink-written ones.</small>
-        </label>
+        <div class="switch choice-row">
+          <b>Numbers</b>
+          <div class="seg" data-setting-choice="numberStyle" id="m-numberStyle">
+            <button type="button" data-v="engraved">Engraved</button>
+            <button type="button" data-v="handwritten">Written</button>
+            <button type="button" data-v="colored">Colored</button>
+          </div>
+        </div>
         <div class="adv-title">Advanced</div>
         <label class="switch">
           <b>Show chunk borders</b>

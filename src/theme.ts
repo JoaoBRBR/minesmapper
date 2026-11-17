@@ -5,7 +5,7 @@ import { onSettingsChange, settings } from './settings';
 
 function apply() {
   setPaperTone(settings.darkPaper);
-  setNumberStyle(settings.coloredNumbers);
+  setNumberStyle(settings.numberStyle);
   document.documentElement.dataset.paper = settings.darkPaper ? 'dark' : 'light';
   document
     .querySelector('meta[name="theme-color"]')
@@ -16,5 +16,7 @@ export function initTheme() {
   apply();
   onSettingsChange(apply);
   // The handwriting font loads asynchronously; redraw once it is ready.
-  void document.fonts?.load('700 20px Kalam').then(bumpVisuals, () => {});
+  for (const font of ['Cinzel', 'Kalam']) {
+    void document.fonts?.load(`700 20px ${font}`).then(bumpVisuals, () => {});
+  }
 }

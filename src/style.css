@@ -1,7 +1,14 @@
 /* Minefield: a cartographer's map on old paper.
    Everything is driven by the variables below; [data-paper='dark'] swaps them for a darker parchment. */
 
-/* Handwriting for the numbers on the map (bundled, so it also works offline). OFL licence: /kalam-OFL.txt */
+/* Fonts for the numbers on the map (bundled, so they also work offline). OFL licences: /kalam-OFL.txt, /cinzel-OFL.txt */
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../node_modules/@fontsource/cinzel/files/cinzel-latin-700-normal.woff2') format('woff2');
+}
 @font-face {
   font-family: 'Kalam';
   font-style: normal;
@@ -646,6 +653,14 @@ input:not([type]) {
 }
 #settings .stack {
   margin-top: 14px;
+}
+.choice-row {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.choice-row .seg button {
+  padding: 7px 8px;
+  font-size: 13px;
 }
 .adv-title {
   margin: 16px 0 0;

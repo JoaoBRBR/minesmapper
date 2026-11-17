@@ -553,19 +553,40 @@ function bindCreator() {
 
 const $settings = el('settings');
 
+/** Settings that are plain on/off switches. */
+type ToggleKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+
 function bindSettings() {
   // The same switches live in the Settings dialog and in the game menu; keep them all in sync.
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input[data-setting]')];
-  const sync = () => inputs.forEach((i) => (i.checked = settings[i.dataset.setting as keyof Settings]));
+  const sync = () => inputs.forEach((i) => (i.checked = settings[i.dataset.setting as ToggleKey]));
   sync();
   onSettingsChange(sync);
   for (const input of inputs) {
     input.addEventListener('change', () => {
-      const key = input.dataset.setting as keyof Settings;
+      const key = input.dataset.setting as ToggleKey;
       setSetting(key, input.checked);
       // Give immediate feedback when something is switched on.
       if (input.checked && key === 'sound') sound.test();
       if (input.checked && key === 'vibration') haptics.test();
+    });
+  }
+  // Choice groups (e.g. number style): a segmented control stored as one setting.
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-setting-choice]')];
+  const syncGroups = () =>
+    groups.forEach((g) =>
+      g.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+        const on = b.dataset.v === String(settings[g.dataset.settingChoice as keyof Settings]);
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', String(on));
+      }),
+    );
+  syncGroups();
+  onSettingsChange(syncGroups);
+  for (const g of groups) {
+    g.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest('button');
+      if (b?.dataset.v) setSetting(g.dataset.settingChoice as 'numberStyle', b.dataset.v as Settings['numberStyle']);
     });
   }
   if (!vibrationSupported) {

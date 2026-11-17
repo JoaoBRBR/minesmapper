@@ -1,4 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
+import type { NumberStyle } from './settings';
 
 export interface Camera {
   /** World-space cell coordinate at the centre of the screen (fractional). */
@@ -80,7 +81,7 @@ let PAPER: string[] = [];
 let REVIEW: string[] = [];
 let ICE: string[] = [];
 let paperTexture: HTMLCanvasElement | null = null;
-let coloredNumbers = false;
+let numberStyle: NumberStyle = 'engraved';
 /** Bumped whenever the look changes, so the game knows to redraw. */
 export let visualsVersion = 0;
 export const bumpVisuals = () => void visualsVersion++;
@@ -98,17 +99,17 @@ export function setPaperTone(dark: boolean) {
   // Unexplored ground is bare paper: nothing about the terrain leaks through.
   const flat = `rgb(${paper[0]},${paper[1]},${paper[2]})`;
   PAPER = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(flat);
-  // Ice: water you can faintly see through, a pale blue glaze over the paper.
-  ICE = buildPalette((base, f) => blend(blend(lit(base, f), [196, 226, 242], 0.45), paper, 0.35));
+  // Ice: water you can faintly see through. Mostly solid blue, with just a hint of glaze.
+  ICE = buildPalette((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
   paperTexture = null;
   bumpVisuals();
 }
 setPaperTone(false);
 
-/** Ink-written numbers (default) or the classic coloured ones. */
-export function setNumberStyle(colored: boolean) {
-  if (colored === coloredNumbers) return;
-  coloredNumbers = colored;
+/** Engraved (default), hand-written or classic coloured numbers. */
+export function setNumberStyle(style: NumberStyle) {
+  if (style === numberStyle) return;
+  numberStyle = style;
   bumpVisuals();
 }
 
@@ -132,6 +133,7 @@ const paletteIndex = (biome: number, shade: number) => biome * SHADE_LEVELS + (s
 const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12', '#0e7490', '#111827', '#525252'];
 const INK = '#2a1b0e';
 const HAND_FONT = 'Kalam, "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
+const ENGRAVED_FONT = 'Cinzel, "Trajan Pro", Palatino, Georgia, serif';
 
 /** Cell reveal ripple (parallel arrays; `t0` is the start time of each cell's pop, in ms). */
 export interface Ripple {
@@ -231,9 +233,12 @@ export function draw(
   if (zoom >= 8) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = coloredNumbers
-      ? `700 ${Math.round(zoom * 0.62)}px system-ui, sans-serif`
-      : `700 ${Math.round(zoom * 0.7)}px ${HAND_FONT}`;
+    ctx.font =
+      numberStyle === 'colored'
+        ? `700 ${Math.round(zoom * 0.62)}px system-ui, sans-serif`
+        : numberStyle === 'handwritten'
+          ? `700 ${Math.round(zoom * 0.7)}px ${HAND_FONT}`
+          : `700 ${Math.round(zoom * 0.6)}px ${ENGRAVED_FONT}`;
     ctx.lineJoin = 'round';
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -247,7 +252,7 @@ export function draw(
         if (state === 0) {
           // A mine seen faintly through ice.
           if ((b & (ST_ICE | ST_ICE_MINE)) === (ST_ICE | ST_ICE_MINE)) {
-            ctx.globalAlpha = 0.42;
+            ctx.globalAlpha = 0.5;
             drawMine(ctx, mx, my, zoom * 0.9, false);
             ctx.globalAlpha = 1;
           }
@@ -257,12 +262,18 @@ export function draw(
           if (b & ST_POWERUP && zoom >= 12) drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
           const n = b & 0x0f;
           if (n > 0 && zoom >= 12) {
-            if (coloredNumbers) {
+            if (numberStyle === 'colored') {
               ctx.lineWidth = Math.max(2, zoom * 0.14);
               ctx.strokeStyle = 'rgba(255,255,255,0.85)';
               ctx.strokeText(String(n), mx, my + zoom * 0.04);
               ctx.fillStyle = NUMBER_COLORS[n];
               ctx.fillText(String(n), mx, my + zoom * 0.04);
+            } else if (numberStyle === 'engraved') {
+              // Letterpress: a pale edge under dark ink, perfectly upright like a printed map.
+              ctx.fillStyle = 'rgba(250, 240, 214, 0.75)';
+              ctx.fillText(String(n), mx + zoom * 0.025, my + zoom * 0.045);
+              ctx.fillStyle = INK;
+              ctx.fillText(String(n), mx, my + zoom * 0.02);
             } else {
               // Written by hand: a touch of tilt and wobble that is stable per cell.
               const hsh = Math.imul(x0 + c, 73856093) ^ Math.imul(y0 + r, 19349663);

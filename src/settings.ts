@@ -1,5 +1,8 @@
 // Per-device preferences, kept in localStorage (a convenience, not game state).
 
+export type NumberStyle = 'engraved' | 'handwritten' | 'colored';
+const NUMBER_STYLES: NumberStyle[] = ['engraved', 'handwritten', 'colored'];
+
 export interface Settings {
   animations: boolean;
   sound: boolean;
@@ -8,12 +11,12 @@ export interface Settings {
   chunkBorders: boolean;
   /** Darker parchment for night play. */
   darkPaper: boolean;
-  /** Classic coloured numbers instead of ink-written ones. */
-  coloredNumbers: boolean;
+  /** How the numbers on the map look. */
+  numberStyle: NumberStyle;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, coloredNumbers: false };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved' };
 
 function load(): Settings {
   try {
@@ -24,7 +27,12 @@ function load(): Settings {
       vibration: typeof raw.vibration === 'boolean' ? raw.vibration : DEFAULTS.vibration,
       chunkBorders: typeof raw.chunkBorders === 'boolean' ? raw.chunkBorders : DEFAULTS.chunkBorders,
       darkPaper: typeof raw.darkPaper === 'boolean' ? raw.darkPaper : DEFAULTS.darkPaper,
-      coloredNumbers: typeof raw.coloredNumbers === 'boolean' ? raw.coloredNumbers : DEFAULTS.coloredNumbers,
+      // Older saves stored a boolean `coloredNumbers`.
+      numberStyle: NUMBER_STYLES.includes(raw.numberStyle)
+        ? raw.numberStyle
+        : raw.coloredNumbers === true
+          ? 'colored'
+          : DEFAULTS.numberStyle,
     };
   } catch {
     return { ...DEFAULTS };
