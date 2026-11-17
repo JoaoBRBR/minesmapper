@@ -22,9 +22,9 @@ fn main() {
             println!("seed {seed}: land {} mines {m} lakes {}", w.land_total(), w.lake_total());
         }
     }
-    println!("-- small (96), density 0.06/0.12");
+    println!("-- mid (72), density 0.06/0.12");
     for seed in 1..60u32 {
-        let w = World::new_island(seed, 96, 0.06, 0.12, 2);
+        let w = World::new_island(seed, 72, 0.06, 0.12, 2);
         println!("seed {seed}: land {} mines {} lakes {}", w.land_total(), w.mines_total(), w.lake_total());
     }
     println!("-- endless: land around chunk (2,-2) cells 32..47 x -32..-17, and along x=40, y -60..-20");

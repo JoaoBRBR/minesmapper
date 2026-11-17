@@ -102,7 +102,7 @@ export const LEVELS: LevelDef[] = [
     ],
     mode: 'island',
     seed: 36,
-    size: 96,
+    size: 72,
     density: 0.06,
     maxDensity: 0.12,
     hearts: 3,
