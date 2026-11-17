@@ -148,6 +148,21 @@ pub struct World {
     island: Option<Island>,
     /// Mines on the island (island mode only; recomputed after the first click).
     mines_total: u32,
+    /// Mistakes allowed before the game is lost; 0 = the first mine ends it.
+    hearts_max: u32,
+    goal: Goal,
+    /// Where the very first tap may land `(x0, y0, x1, y1)`, inclusive; `None` = anywhere allowed.
+    first_area: Option<(i32, i32, i32, i32)>,
+}
+
+/// What wins the game besides clearing the whole island.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Goal {
+    None,
+    /// Clear this cleanup chunk (chunk units).
+    Chunk(i32, i32),
+    /// Reveal this cell.
+    Reach(i32, i32),
 }
 
 #[wasm_bindgen]
@@ -185,6 +200,66 @@ impl World {
             ice_cells: HashSet::new(),
             island: None,
             mines_total: 0,
+            hearts_max: 0,
+            goal: Goal::None,
+            first_area: None,
+        }
+    }
+
+    /// Mistakes allowed before the game is lost (0 = the first mine ends the game).
+    pub fn set_hearts(&mut self, hearts: u32) {
+        self.hearts_max = hearts;
+    }
+
+    pub fn hearts_max(&self) -> u32 {
+        self.hearts_max
+    }
+
+    /// Mines stepped on so far.
+    pub fn mistakes(&self) -> u32 {
+        self.exploded.len() as u32
+    }
+
+    /// Win by clearing one cleanup chunk (chunk units) instead of the whole island.
+    pub fn set_goal_chunk(&mut self, cx: i32, cy: i32) {
+        self.goal = Goal::Chunk(cx, cy);
+    }
+
+    /// Win by revealing one cell. That cell and its neighbours are never mines.
+    pub fn set_goal_reach(&mut self, x: i32, y: i32) {
+        self.goal = Goal::Reach(x, y);
+    }
+
+    /// 0 = none, 1 = clear a chunk, 2 = reach a cell.
+    pub fn goal_kind(&self) -> u32 {
+        match self.goal {
+            Goal::None => 0,
+            Goal::Chunk(..) => 1,
+            Goal::Reach(..) => 2,
+        }
+    }
+
+    /// Restricts where the first tap may land (cells, inclusive corners).
+    pub fn set_first_area(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        self.first_area = Some((x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)));
+    }
+
+    /// Cells of the chunk goal still hidden / total safe cells in it: `[done, total]`.
+    pub fn goal_progress(&self) -> Vec<u32> {
+        match self.goal {
+            Goal::Chunk(cx, cy) => {
+                let k = (cx, cy);
+                if self.clean_chunks.contains(&k) {
+                    let t = self.chunk_safe_total(k) as u32;
+                    return vec![t, t];
+                }
+                match self.chunk_stats.get(&k) {
+                    Some(&(t, d)) => vec![d as u32, t as u32],
+                    None => vec![0, self.chunk_safe_total(k) as u32],
+                }
+            }
+            Goal::Reach(x, y) => vec![self.revealed.contains(&(x, y)) as u32, 1],
+            Goal::None => vec![0, 0],
         }
     }
 
@@ -412,6 +487,9 @@ impl World {
     /// restricted to the start area in endless mode, and free on an island.
     pub fn can_reveal(&self, x: i32, y: i32) -> bool {
         if self.revealed.is_empty() {
+            if let Some((x0, y0, x1, y1)) = self.first_area {
+                return (x0..=x1).contains(&x) && (y0..=y1).contains(&y);
+            }
             return self.island.is_some() || (x.abs() <= FIRST_CLICK_RADIUS && y.abs() <= FIRST_CLICK_RADIUS);
         }
         for dy in -REACH..=REACH {
@@ -722,6 +800,11 @@ impl World {
                 return false;
             }
         }
+        if let Goal::Reach(gx, gy) = self.goal {
+            if (x - gx).abs() <= 1 && (y - gy).abs() <= 1 {
+                return false;
+            }
+        }
         let threshold = (self.density_at(x, y) as f64 * u32::MAX as f64) as u32;
         hash(self.seed, x, y) < threshold
     }
@@ -768,6 +851,7 @@ impl World {
             || !self.is_playable(x, y)
             || self.flagged.contains(&(x, y))
             || self.revealed.contains(&(x, y))
+            || self.exploded.contains(&(x, y))
         {
             return 0;
         }
@@ -777,7 +861,9 @@ impl World {
         }
         if self.is_mine(x, y) {
             self.exploded.insert((x, y));
-            self.game_over = true;
+            if self.exploded.len() as u32 > self.hearts_max {
+                self.game_over = true;
+            }
             return 0;
         }
         let mut queue = VecDeque::from([(x, y, 0i32)]);
@@ -817,6 +903,14 @@ impl World {
             self.won = true;
             self.tidy_whole_island();
         }
+        let reached = match self.goal {
+            Goal::Chunk(cx, cy) => self.clean_chunks.contains(&(cx, cy)),
+            Goal::Reach(x, y) => self.revealed.contains(&(x, y)),
+            Goal::None => false,
+        };
+        if reached {
+            self.won = true;
+        }
         count
     }
 
@@ -832,6 +926,7 @@ impl World {
             || self.won
             || !self.is_playable(x, y)
             || self.revealed.contains(&(x, y))
+            || self.exploded.contains(&(x, y))
             || self.is_settled(x, y)
         {
             return false;
@@ -858,7 +953,9 @@ impl World {
             for dx in -1..=1 {
                 let p = (x + dx, y + dy);
                 // Mines hidden inside tidied-up ground count as marked.
-                if self.flagged.contains(&p) || (self.is_settled(p.0, p.1) && self.is_mine(p.0, p.1)) {
+                if self.flagged.contains(&p)
+                    || self.exploded.contains(&p)
+                    || (self.is_settled(p.0, p.1) && self.is_mine(p.0, p.1)) {
                     flags += 1;
                 }
             }
@@ -1644,5 +1741,66 @@ mod tests {
         assert!(sea_cells.iter().all(|&(x, y)| w.view(x, y, 1, 1)[0] == ST_SEA));
         // Sea in a chunk that was not touched stays unexplored.
         assert_eq!(w.view(-1000, 0, 1, 1)[0], ST_VOID);
+    }
+
+    #[test]
+    fn hearts_allow_mistakes_before_losing() {
+        let mut w = World::new_island(5, 96, 0.2, 0.3, 2);
+        w.set_hearts(2);
+        w.reveal(0, 0);
+        let mines: Vec<(i32, i32)> = (-48..48)
+            .flat_map(|y| (-48..48).map(move |x| (x, y)))
+            .filter(|&(x, y)| w.is_mine(x, y) && !w.is_settled(x, y))
+            .take(3)
+            .collect();
+        assert_eq!(mines.len(), 3);
+        w.reveal_unchecked(mines[0].0, mines[0].1);
+        assert!(!w.is_game_over());
+        assert_eq!(w.mistakes(), 1);
+        w.reveal_unchecked(mines[0].0, mines[0].1);
+        assert_eq!(w.mistakes(), 1, "tapping the same mine twice costs nothing");
+        w.reveal_unchecked(mines[1].0, mines[1].1);
+        assert!(!w.is_game_over());
+        w.reveal_unchecked(mines[2].0, mines[2].1);
+        assert!(w.is_game_over());
+    }
+
+    #[test]
+    fn first_tap_is_limited_to_the_start_area() {
+        let mut w = World::new(3, 0.15, 0.2, 0.0);
+        w.set_first_area(100, 100, 110, 110);
+        assert!(!w.can_reveal(0, 0));
+        assert!(w.can_reveal(105, 105));
+        assert_eq!(w.reveal(0, 0), 0);
+        assert!(w.reveal(105, 105) > 0);
+    }
+
+    #[test]
+    fn reaching_the_goal_cell_wins_and_keeps_it_safe() {
+        let mut w = World::new(3, 0.2, 0.2, 0.0);
+        w.set_goal_reach(20, -30);
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                assert!(!w.is_mine(20 + dx, -30 + dy));
+            }
+        }
+        assert_eq!(w.goal_kind(), 2);
+        w.reveal_unchecked(20, -30);
+        assert!(w.is_won());
+    }
+
+    #[test]
+    fn clearing_the_goal_chunk_wins() {
+        let mut w = World::new(8, 0.12, 0.12, 0.0);
+        w.set_goal_chunk(0, 0);
+        for y in 0..CLEAN_CHUNK {
+            for x in 0..CLEAN_CHUNK {
+                if !w.is_mine(x, y) {
+                    w.reveal(x, y);
+                }
+            }
+        }
+        assert!(w.is_chunk_clean(0, 0));
+        assert!(w.is_won());
     }
 }
