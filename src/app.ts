@@ -987,28 +987,25 @@ function bindSettings() {
 
 /** The audio and vibration buttons floating on the main menu. */
 function bindQuickToggles() {
+  const music = el('h-music');
   const audio = el('h-audio');
   const vib = el('h-vibration');
+  const put = (b: HTMLElement, token: string) => {
+    if (b.dataset.t === token) return;
+    b.dataset.t = token;
+    b.textContent = token;
+  };
   const sync = () => {
-    const on = settings.sound || settings.music;
-    const a = on ? '🔊' : '🔇';
-    if (audio.dataset.t !== a) {
-      audio.dataset.t = a;
-      audio.textContent = a;
-    }
-    const v = settings.vibration && vibrationSupported ? '📳' : '📴';
-    if (vib.dataset.t !== v) {
-      vib.dataset.t = v;
-      vib.textContent = v;
-    }
+    put(music, settings.music ? '♪' : '♫');
+    put(audio, settings.sound ? '🔊' : '🔇');
+    put(vib, settings.vibration && vibrationSupported ? '📳' : '📴');
   };
   sync();
   onSettingsChange(sync);
+  music.addEventListener('click', () => setSetting('music', !settings.music));
   audio.addEventListener('click', () => {
-    const next = !(settings.sound || settings.music);
-    setSetting('sound', next);
-    setSetting('music', next);
-    if (next) sound.test();
+    setSetting('sound', !settings.sound);
+    if (settings.sound) sound.test();
   });
   if (!vibrationSupported) vib.hidden = true;
   vib.addEventListener('click', () => {

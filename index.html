@@ -220,7 +220,8 @@
     <!-- Main menu -->
     <main id="home-screen" class="screen" hidden>
       <div id="home-float" role="toolbar" aria-label="Quick settings">
-        <button id="h-audio" class="float-btn" aria-label="Audio" title="Sound and music"></button>
+        <button id="h-music" class="float-btn" aria-label="Music" title="Music"></button>
+        <button id="h-audio" class="float-btn" aria-label="Sound" title="Sound effects"></button>
         <button id="h-vibration" class="float-btn" aria-label="Vibration" title="Vibration"></button>
         <button id="h-settings" class="float-btn" aria-label="Settings" title="Settings">⚙</button>
       </div>
@@ -335,7 +336,8 @@
     </section>
 
     <!-- World creator -->
-    <section id="creator" class="screen" hidden>
+    <section id="creator" class="screen has-back" hidden>
+      <button id="c-cancel" class="back-fab">← Back</button>
       <div class="panel creator-grid">
         <div class="form">
           <h1>Free expedition</h1>
@@ -403,7 +405,6 @@
           <canvas id="c-preview"></canvas>
           <p class="hint" id="c-stats"></p>
           <div class="row">
-            <button type="button" id="c-cancel">Cancel</button>
             <button type="button" id="c-create" class="primary">Create &amp; play</button>
           </div>
         </div>

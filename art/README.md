@@ -60,6 +60,7 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/trash.svg` | 48×48 | Delete world (🗑). |
 | `ui/flame.svg` | 48×48 | Daily streak (🔥). |
 | `ui/music.svg` | 48×48 | Music (♪). |
+| `ui/music-off.svg` | 48×48 | Music is off (♫), floating button on the main menu. |
 | `ui/check.svg` | 48×48 | Done / cleared (✓). |
 | `ui/cross.svg` | 48×48 | Lost / close (✕). |
 | `ui/arrow-right.svg` | 48×48 | Direction arrows (→); the game rotates this one for ← ↑ ↓. |
