@@ -6,11 +6,12 @@ import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Sett
 import { sound } from './sound';
 import { bump, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
-import { DIFFICULTIES, ISLAND_SIZES, makeWorld, randomSeed, seedFromText } from './config';
+import { DIFFICULTIES, ISLAND_SIZES, WORLD_GEN, makeWorld, randomSeed, seedFromText } from './config';
 import {
   fmtTime,
   initGame,
   isFlagMode,
+  toggleProgressView,
   loadWorld,
   iceClearersAvailable,
   oraclesAvailable,
@@ -476,6 +477,10 @@ function bindGameMenu() {
     recenterView();
     closePause();
   });
+  el('m-progress').addEventListener('click', () => {
+    closePause();
+    toggleProgressView();
+  });
   el('m-3d').addEventListener('click', () => {
     closePause();
     if (current) {
@@ -579,6 +584,7 @@ function readConfig(): WorldConfig {
     difficulty: diffSeg.get() as Difficulty,
     density: Number($d0.value) / 100,
     maxDensity: Number($d1.value) / 100,
+    gen: WORLD_GEN,
   };
 }
 

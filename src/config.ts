@@ -7,6 +7,9 @@ export const DIFFICULTIES: Record<Exclude<Difficulty, 'custom'>, { density: numb
   hard: { density: 0.2, maxDensity: 0.34 },
 };
 
+/** What new worlds are generated with (see WorldConfig.gen). */
+export const WORLD_GEN = 2;
+
 export const ISLAND_SIZES = { small: 96, medium: 192, large: 320 } as const;
 
 /** Endless mode: distance (cells) over which mine density ramps up. */
@@ -14,7 +17,7 @@ const ENDLESS_RAMP_LEN = 300;
 
 export function makeWorld(c: WorldConfig): World {
   return c.mode === 'island'
-    ? World.new_island(c.seed, c.size, c.density, c.maxDensity)
+    ? World.new_island(c.seed, c.size, c.density, c.maxDensity, c.gen ?? 1)
     : new World(c.seed, c.density, c.maxDensity, ENDLESS_RAMP_LEN);
 }
 

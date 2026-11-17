@@ -47,6 +47,10 @@ const $menuBadge = el('menu-badge');
 const $iceBtn = el<HTMLButtonElement>('iceclear');
 const $banner = el('banner');
 const $b3d = el<HTMLButtonElement>('b-3d');
+const $bProgress = el<HTMLButtonElement>('b-progress');
+const $progressBar = el('progress-bar');
+const $progressText = el('progress-text');
+const $progressBtn = el<HTMLButtonElement>('progress');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
 
@@ -61,6 +65,9 @@ let flagMode = false;
 let oracleMode = false;
 /** Same idea for the ice clearer: the next tap on a water cell spends one. */
 let iceMode = false;
+/** Progress view: a simplified, read-only map of what you have found. */
+let progressView = false;
+let lastWave = 0;
 const cam: Camera = { cx: HOME.x, cy: HOME.y, zoom: 32 };
 let w = 0;
 let h = 0;
@@ -125,6 +132,7 @@ export function loadWorld(
   denied = null;
   oracleMode = false;
   iceMode = false;
+  setProgressView(false);
   glide = null;
   pointers.clear();
   $timer.hidden = config.mode !== 'island';
@@ -191,6 +199,7 @@ export function setActive(on: boolean) {
     denied = null;
     oracleMode = false;
     iceMode = false;
+    setProgressView(false);
   } else {
     resize();
   }
@@ -288,6 +297,7 @@ function updateBanner(now: number) {
   $banner.hidden = hide;
   // 3D view: a reward for clearing an island.
   $b3d.hidden = !(wd.is_island() && key === 'won');
+  $bProgress.hidden = key !== 'lost';
 }
 
 function updateHud(now: number) {
@@ -329,6 +339,7 @@ function updateHud(now: number) {
   setText($oracle, `✨ Oracle ×${oracles}`);
   $oracle.setAttribute('aria-pressed', String(oracleMode));
   canvas.classList.toggle('targeting', oracleMode || iceMode);
+  if (progressView) setText($progressText, progressSummary(wd));
   if (now - lastMoodCheck > 1500) {
     // The music follows the biome in the middle of the screen.
     lastMoodCheck = now;
@@ -344,6 +355,10 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   if (!active || !world) return;
   stepGlide(now);
+  if (wavesOn() && now - lastWave > 66) {
+    lastWave = now;
+    invalidate();
+  }
   if (visualsVersion !== lastVisuals) {
     lastVisuals = visualsVersion;
     invalidate();
@@ -373,11 +388,16 @@ function render(now: number) {
 
 function renderScene(now: number) {
   const wd = world!;
+  if (progressView) {
+    draw(ctx, wd, cam, w, h, 'progress');
+    return;
+  }
   const finished = wd.is_game_over() || wd.is_won();
   const fx: Fx = {
     now,
     ripple,
     cleanups: cleanFx,
+    waves: wavesOn(),
     mines: endFx?.kind === 'lost' ? { t0: endFx.t0, origin: endFx.origin } : null,
   };
   if (!endFx) {
@@ -463,6 +483,7 @@ function isChordable(x: number, y: number): boolean {
 }
 
 function activate(px: number, py: number, forceFlag: boolean) {
+  if (progressView) return; // the progress map is for looking only
   const wd = world!;
   const [x, y] = screenToCell(cam, w, h, px, py);
   const before = {
@@ -772,7 +793,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'o' || e.key === 'O') toggleOracleMode();
   if (e.key === 'i' || e.key === 'I') toggleIceMode();
   if (e.key === 'Escape') {
-    if (oracleMode || iceMode) oracleMode = iceMode = false;
+    if (progressView) setProgressView(false);
+    else if (oracleMode || iceMode) oracleMode = iceMode = false;
     else cb.onMenu();
   }
 });
@@ -787,6 +809,16 @@ const settled = (fn: () => void) => () => {
 el('b-restart').addEventListener('click', settled(() => cb.onRestart()));
 el('b-menu').addEventListener('click', settled(() => cb.onMenu()));
 $b3d.addEventListener('click', settled(() => cb.onView3D()));
+$bProgress.addEventListener(
+  'click',
+  settled(() => {
+    bannerDismissed = true;
+    $banner.hidden = true;
+    setProgressView(true);
+  }),
+);
+$progressBtn.addEventListener('click', () => setProgressView(!progressView));
+el('progress-exit').addEventListener('click', () => setProgressView(false));
 el('b-look').addEventListener(
   'click',
   settled(() => {
@@ -814,9 +846,33 @@ if (import.meta.env.DEV) {
   };
 }
 
+function setProgressView(on: boolean) {
+  progressView = on;
+  if (on) oracleMode = iceMode = false;
+  $progressBar.hidden = !on;
+  invalidate();
+}
+
+function progressSummary(wd: World): string {
+  const over = wd.is_game_over() ? ' · game over' : wd.is_won() ? ' · cleared!' : '';
+  if (wd.is_island()) {
+    const total = wd.safe_total();
+    const pct = total ? Math.floor((wd.score() / total) * 100) : 0;
+    return `📊 ${wd.score().toLocaleString()} of ${total.toLocaleString()} safe cells found (${pct}%)${over}`;
+  }
+  return `📊 ${wd.score().toLocaleString()} cells found · ${wd.farthest()} cells from the start${over}`;
+}
+
+/** Shore waves animate only on islands, when zoomed in enough to see the shore, and if allowed. */
+function wavesOn() {
+  return settings.waves && animationsOn() && !progressView && !!world?.is_island() && cam.zoom >= 5;
+}
+
 // --- Hooks for the in-game menu --------------------------------------------------------------
 
 export const isFlagMode = () => flagMode;
+export const toggleProgressView = () => setProgressView(!progressView);
+export const isProgressView = () => progressView;
 
 export function setFlagMode(on: boolean) {
   if (on !== flagMode) toggleFlagMode();

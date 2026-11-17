@@ -40,20 +40,21 @@ fn dist_from_origin(x: i32, y: i32) -> f64 {
 /// mine density. Derived from `examples/calibrate.rs`: a perfect solver is forced into a
 /// coin-flip about this often per cleared cell, so oracles are exactly as rare as the
 /// guesses they cure (measured per 1000 cells: 0.06 @20%, 0.44 @24%, 7.9 @28%, 32 @30%,
-/// 81 @34%, 132 @36%). A small floor keeps them a (very rare) possibility everywhere.
+/// 81 @34%, 132 @36%). The table is that curve made roughly three times more generous, with a
+/// floor of about one oracle per 800 safe cells, so they are a pleasant find everywhere.
 const POWERUP_RATE: [(f32, f64); 12] = [
-    (0.00, 0.0001),
-    (0.20, 0.0001),
-    (0.22, 0.00013),
-    (0.24, 0.00044),
-    (0.26, 0.00125),
-    (0.28, 0.0079),
-    (0.30, 0.032),
-    (0.32, 0.044),
-    (0.34, 0.081),
-    (0.36, 0.132),
-    (0.45, 0.15),
-    (1.00, 0.15),
+    (0.00, 0.0012),
+    (0.20, 0.0012),
+    (0.22, 0.0016),
+    (0.24, 0.0035),
+    (0.26, 0.008),
+    (0.28, 0.03),
+    (0.30, 0.09),
+    (0.32, 0.12),
+    (0.34, 0.17),
+    (0.36, 0.22),
+    (0.45, 0.25),
+    (1.00, 0.25),
 ];
 
 fn powerup_rate(density: f32) -> f64 {
@@ -189,8 +190,8 @@ impl World {
 
     /// A bounded island of `size` x `size` cells surrounded by water. Mine
     /// density rises from `density` at the centre to `max_density` at the coast.
-    pub fn new_island(seed: u32, size: u32, density: f32, max_density: f32) -> World {
-        let terrain = Terrain::new_island(seed, size as i32);
+    pub fn new_island(seed: u32, size: u32, density: f32, max_density: f32, generation: u32) -> World {
+        let terrain = Terrain::new_island(seed, size as i32, generation);
         let island = Island::build(&terrain, size as i32);
         let mut w = World::new(seed, density, max_density, island.size as f32 * 0.35);
         w.terrain = terrain;
@@ -921,9 +922,15 @@ impl World {
                 } else {
                     ST_HIDDEN | self.ice_bits(x, y, biome)
                 };
+                // The palette only looks at the top 5 bits of the shade, so bit 0 is free to say
+                // "this revealed cell held an ice clearer" (an oracle is the plain star).
+                let mut shade = chunk[i + 1] & 0xf8;
+                if state & 0x30 == ST_REVEALED && state & ST_CLEAN == 0 && self.is_iceclearer(x, y) {
+                    shade |= 1;
+                }
                 out.push(state);
                 out.push(biome);
-                out.push(chunk[i + 1]);
+                out.push(shade);
             }
         }
         out
@@ -1047,13 +1054,14 @@ mod tests {
         let t = Terrain::new(21);
         let v = w.view(-40, -33, 70, 70);
         for (i, (x, y)) in (-33..37).flat_map(|y| (-40..30).map(move |x| (x, y))).enumerate() {
-            assert_eq!((v[i * 3 + 1], v[i * 3 + 2]), t.cell(x, y), "at {x},{y}");
+            let (b, sh) = t.cell(x, y);
+            assert_eq!((v[i * 3 + 1], v[i * 3 + 2]), (b, sh & 0xf8), "at {x},{y}");
         }
     }
 
     #[test]
     fn water_is_unplayable_and_mine_free() {
-        let w = World::new_island(8, 128, 0.15, 0.25);
+        let w = World::new_island(8, 128, 0.15, 0.25, 2);
         assert!(w.is_island());
         assert!(!w.is_playable(-1000, 0));
         assert!(!w.is_mine(-1000, 0));
@@ -1065,7 +1073,7 @@ mod tests {
 
     #[test]
     fn mines_only_on_land_and_totals_add_up() {
-        let w = World::new_island(2, 128, 0.2, 0.2);
+        let w = World::new_island(2, 128, 0.2, 0.2, 2);
         assert!(w.land_total() > 2000);
         assert!(w.mines_total() > 0 && w.mines_total() < w.land_total());
         assert_eq!(w.safe_total(), w.land_total() - w.mines_total());
@@ -1073,7 +1081,7 @@ mod tests {
 
     #[test]
     fn clearing_every_safe_cell_wins_the_island() {
-        let mut w = World::new_island(3, 96, 0.12, 0.2);
+        let mut w = World::new_island(3, 96, 0.12, 0.2, 2);
         w.reveal(0, 0);
         assert!(!w.is_game_over());
         for y in -48..48 {
@@ -1091,7 +1099,7 @@ mod tests {
     #[test]
     fn first_click_on_the_island_is_safe_for_many_seeds() {
         for seed in 0..30 {
-            let mut w = World::new_island(seed, 96, 0.25, 0.3);
+            let mut w = World::new_island(seed, 96, 0.25, 0.3, 2);
             let c = (-48..48)
                 .flat_map(|y| (-48..48).map(move |x| (x, y)))
                 .find(|&(x, y)| w.is_playable(x, y))
@@ -1103,7 +1111,7 @@ mod tests {
 
     #[test]
     fn mines_get_denser_towards_the_coast() {
-        let w = World::new_island(4, 192, 0.12, 0.30);
+        let w = World::new_island(4, 192, 0.12, 0.30, 2);
         assert!(w.density_at(80, 0) > w.density_at(5, 0) + 0.05);
     }
 
@@ -1112,7 +1120,7 @@ mod tests {
         for island in [false, true] {
             let make = || {
                 if island {
-                    World::new_island(6, 96, 0.15, 0.25)
+                    World::new_island(6, 96, 0.15, 0.25, 2)
                 } else {
                     World::new(6, 0.15, 0.25, 300.0)
                 }
@@ -1184,7 +1192,7 @@ mod tests {
 
     #[test]
     fn island_first_click_can_be_anywhere_on_land() {
-        let w = World::new_island(2, 128, 0.15, 0.25);
+        let w = World::new_island(2, 128, 0.15, 0.25, 2);
         let land = (-64..64)
             .flat_map(|y| (-64..64).map(move |x| (x, y)))
             .find(|&(x, y)| w.is_playable(x, y) && x.abs() > 30)
@@ -1259,7 +1267,7 @@ mod tests {
         let mut last = 0.0;
         for i in 0..=100 {
             let r = powerup_rate(i as f32 / 100.0);
-            assert!(r >= last - 1e-12 && (0.0001..=0.15).contains(&r), "d={} r={r}", i);
+            assert!(r >= last - 1e-12 && (0.0012..=0.25).contains(&r), "d={} r={r}", i);
             last = r;
         }
     }
@@ -1279,10 +1287,10 @@ mod tests {
             }
             n
         };
-        let hard = count(0.28, 120); // ~0.8% of ~10k safe cells
-        assert!((40..160).contains(&hard), "hard: {hard}");
-        let calm = count(0.15, 200); // ~0.01% of ~34k safe cells
-        assert!(calm < 25, "calm: {calm}");
+        let hard = count(0.28, 120); // ~3% of ~10k safe cells
+        assert!((200..460).contains(&hard), "hard: {hard}");
+        let calm = count(0.15, 200); // ~0.12% of ~34k safe cells
+        assert!((15..90).contains(&calm), "calm: {calm}");
         assert!(hard as f64 / 120.0f64.powi(2) > calm as f64 / 200.0f64.powi(2) * 10.0);
     }
 
@@ -1413,7 +1421,7 @@ mod tests {
 
     #[test]
     fn a_won_island_is_completely_tidy_and_a_lost_world_shows_everything() {
-        let mut w = World::new_island(3, 96, 0.12, 0.2);
+        let mut w = World::new_island(3, 96, 0.12, 0.2, 2);
         w.reveal(0, 0);
         clear_area(&mut w, -48, -48, 48, 48);
         assert!(w.is_won());
@@ -1493,14 +1501,14 @@ mod tests {
 
     #[test]
     fn a_won_island_with_lakes_counts_lake_cells_as_cells_to_clear() {
-        let w = World::new_island(5, 192, 0.12, 0.2);
+        let w = World::new_island(5, 192, 0.12, 0.2, 2);
         // Safe cells to clear include any lake cells (they are playable).
         assert_eq!(w.safe_total(), w.land_total() - w.mines_total());
     }
 
     #[test]
     fn island_snapshot_describes_every_cell() {
-        let w = World::new_island(9, 96, 0.15, 0.28);
+        let w = World::new_island(9, 96, 0.15, 0.28, 2);
         let snap = w.island_snapshot();
         assert_eq!(snap.len(), 96 * 96 * 2);
         let sea = (SEA * 255.0) as u8;
@@ -1605,7 +1613,7 @@ mod tests {
 
     #[test]
     fn sea_inside_a_cleared_coastal_chunk_shows_its_water() {
-        let mut w = World::new_island(9, 192, 0.12, 0.2);
+        let mut w = World::new_island(9, 192, 0.12, 0.2, 2);
         let h = 96;
         // A chunk with both island and open sea in it.
         let (cx, cy) = (-h / CLEAN_CHUNK..h / CLEAN_CHUNK)

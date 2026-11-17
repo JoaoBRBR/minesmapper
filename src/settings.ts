@@ -21,10 +21,12 @@ export interface Settings {
   music: boolean;
   musicStyle: MusicStyle;
   musicVolume: number;
+  /** Gentle animated waves along island shores. */
+  waves: boolean;
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6 };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true };
 
 function load(): Settings {
   try {
@@ -49,6 +51,7 @@ function load(): Settings {
         typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
           ? raw.musicVolume
           : DEFAULTS.musicVolume,
+      waves: typeof raw.waves === 'boolean' ? raw.waves : DEFAULTS.waves,
     };
   } catch {
     return { ...DEFAULTS };

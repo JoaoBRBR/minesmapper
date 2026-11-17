@@ -55,8 +55,20 @@ const SHADE_LEVELS = 32;
 
 /** Old-paper tones. Unexplored ground is bare paper; revealed ground is an ink wash on it. */
 const TONES = {
-  light: { paper: [233, 217, 172] as RGB, grid: 'rgba(98, 70, 38, 0.24)' },
-  dark: { paper: [62, 52, 42] as RGB, grid: 'rgba(236, 216, 176, 0.11)' },
+  light: {
+    paper: [233, 217, 172] as RGB,
+    grid: 'rgba(98, 70, 38, 0.24)',
+    coast: 'rgba(48, 32, 16, 0.9)', // edge of everything that is not part of the game
+    found: 'rgba(60, 42, 22, 0.62)', // edge of everything you have discovered
+    foam: 'rgba(70, 118, 158, 0.6)',
+  },
+  dark: {
+    paper: [62, 52, 42] as RGB,
+    grid: 'rgba(236, 216, 176, 0.11)',
+    coast: 'rgba(244, 226, 188, 0.85)',
+    found: 'rgba(236, 216, 176, 0.5)',
+    foam: 'rgba(150, 196, 226, 0.5)',
+  },
 };
 type ToneName = keyof typeof TONES;
 let toneName: ToneName = 'light';
@@ -131,8 +143,9 @@ export function setNumberStyle(style: NumberStyle) {
  * play    - fog of war: only revealed cells show their colours.
  * review  - game over / won: everything in colour, revealed cells still stand out.
  * preview - everything in full colour (world creator, menu background).
+ * progress - simplified: what you found is green, what you have not is dark (not playable).
  */
-export type ViewMode = 'play' | 'review' | 'preview';
+export type ViewMode = 'play' | 'review' | 'preview' | 'progress';
 
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
@@ -143,6 +156,18 @@ function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'play' && (state === 0 || state === ST_FLAG) && b & ST_ICE) return ICE;
   return view === 'review' ? REVIEW : PAPER;
 }
+/** Progress view colours: found is green, not found is dark, and the sea is darker still. */
+function progressFill(b: number): string {
+  if (b === ST_VOID || b === ST_SEA) return '#10161c';
+  const state = b & ST_MASK;
+  if (state === ST_REVEALED) return '#58a96a';
+  if (state === ST_MINE && (b & 1) === 1) return '#c0392b'; // the mine that ended the game
+  return '#34353b';
+}
+
+const isVoidCell = (b: number) => b === ST_VOID || b === ST_SEA;
+const isFoundCell = (b: number) => (b & ST_MASK) === ST_REVEALED;
+
 const paletteIndex = (biome: number, shade: number) => biome * SHADE_LEVELS + (shade >> 3);
 
 const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12', '#0e7490', '#111827', '#525252'];
@@ -163,6 +188,8 @@ export interface Fx {
   ripple?: Ripple | null;
   /** Chunks that were just finished: a shimmer sweeps over them (cell coordinates). */
   cleanups?: { x: number; y: number; size: number; t0: number }[];
+  /** Animate the shoreline of an island with gentle waves. */
+  waves?: boolean;
   /** Loss sequence: mines pop outward from `origin`, starting at `t0`. */
   mines?: { t0: number; origin: [number, number] } | null;
 }
@@ -202,47 +229,66 @@ export function draw(
   const px = (x: number) => Math.floor((x - cam.cx) * zoom + w / 2);
   const py = (y: number) => Math.floor((y - cam.cy) * zoom + h / 2);
 
+  const progress = view === 'progress';
+  const at = (r: number, c: number) => data[(r * cols + c) * 3];
+
   // Pass 1: terrain + state tint. Unplayable water is never fogged.
-  let hasVoid = false;
-  let hasTidy = false;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 3;
-      hasVoid ||= data[i] === ST_VOID || data[i] === ST_SEA;
-      hasTidy ||= isTidy(data[i]);
-      ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
+      ctx.fillStyle = progress ? progressFill(data[i]) : paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
       ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
     }
   }
 
-  // Pass 2: grid lines for fogged cells (so the frontier reads clearly).
-  if (zoom >= 14) {
-    ctx.strokeStyle = TONES[toneName].grid;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let c = 0; c <= cols; c++) {
-      const x = px(x0 + c) + 0.5;
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-    }
-    for (let r = 0; r <= rows; r++) {
-      const y = py(y0 + r) + 0.5;
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
-    if (hasVoid || hasTidy) {
-      // Wipe the grid off water and off tidied-up ground, so only unfinished land is gridded.
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const i = (r * cols + c) * 3;
-          if (data[i] !== ST_VOID && data[i] !== ST_SEA && !isTidy(data[i])) continue;
-          ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
-          ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
-        }
+  // The paper grain belongs to the undiscovered ground only: lay it over everything, then
+  // repaint what you have discovered so that stays clean and easy to read.
+  if (view === 'play' || view === 'review') {
+    drawPaperGrain(ctx, cam, w, h);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = (r * cols + c) * 3;
+        if (!isFoundCell(data[i]) && data[i] !== ST_SEA) continue;
+        ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
+        ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
       }
     }
   }
+
+  // Pass 2: grid lines, only around cells that are still part of the puzzle (not water, not tidied).
+  if (zoom >= 14 && !progress) {
+    const gridded = (b: number) => !isVoidCell(b) && !isTidy(b);
+    ctx.strokeStyle = TONES[toneName].grid;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!gridded(at(r, c))) continue;
+        const x = px(x0 + c) + 0.5;
+        const y = py(y0 + r) + 0.5;
+        const x2 = px(x0 + c + 1) + 0.5;
+        const y2 = py(y0 + r + 1) + 0.5;
+        ctx.moveTo(x2, y);
+        ctx.lineTo(x2, y2);
+        ctx.moveTo(x, y2);
+        ctx.lineTo(x2, y2);
+        if (c === 0 || !gridded(at(r, c - 1))) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y2);
+        }
+        if (r === 0 || !gridded(at(r - 1, c))) {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x2, y);
+        }
+      }
+    }
+    ctx.stroke();
+  }
+
+  // Outlines: a firm line around everything that is not part of the game, and a softer one
+  // around everything you have discovered (so sand never melts into the paper).
+  if (view !== 'preview') drawOutlines(ctx, data, cols, rows, x0, y0, px, py, zoom, progress);
+  if (progress) return;
 
   // Pass 3: glyphs (numbers, flags, mines).
   if (zoom >= 8) {
@@ -275,7 +321,11 @@ export function draw(
           continue;
         }
         if (state === ST_REVEALED) {
-          if (b & ST_POWERUP && zoom >= 12) drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
+          if (b & ST_POWERUP && zoom >= 12) {
+            // an ice clearer (shade bit 0) is an ice crystal; an oracle is the gold star
+            if (data[k + 2] & 1) drawCrystal(ctx, sx + zoom * 0.8, sy + zoom * 0.24, zoom * 0.2);
+            else drawStar(ctx, sx + zoom * 0.8, sy + zoom * 0.22, zoom * 0.2);
+          }
           const n = b & 0x0f;
           if (n > 0 && zoom >= 12) {
             if (numberStyle === 'colored') {
@@ -337,6 +387,10 @@ export function draw(
     }
   }
 
+  if (fx?.waves && (view === 'play' || view === 'review')) {
+    drawWaves(ctx, data, cols, rows, x0, y0, px, py, zoom, fx.now);
+  }
+
   // Reveal ripple: cells still "opening" are covered by fog that fades out with a flash.
   if (fx?.ripple) {
     const { xs, ys, t0 } = fx.ripple;
@@ -384,7 +438,6 @@ export function draw(
     }
   }
 
-  if (view !== 'preview') drawPaperGrain(ctx, cam, w, h);
 }
 
 function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
@@ -400,6 +453,142 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.lineWidth = Math.max(1, r * 0.25);
   ctx.strokeStyle = '#78350f';
   ctx.stroke();
+}
+
+/** Segments where two neighbouring cells differ, found by comparing each cell with the one to its right and below. */
+function forEachEdge(
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  visit: (r: number, c: number, dir: 'v' | 'h', a: number, b: number) => void,
+) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const a = data[(r * cols + c) * 3];
+      if (c + 1 < cols) visit(r, c, 'v', a, data[(r * cols + c + 1) * 3]);
+      if (r + 1 < rows) visit(r, c, 'h', a, data[((r + 1) * cols + c) * 3]);
+    }
+  }
+}
+
+function drawOutlines(
+  ctx: CanvasRenderingContext2D,
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  x0: number,
+  y0: number,
+  px: (x: number) => number,
+  py: (y: number) => number,
+  zoom: number,
+  progress: boolean,
+) {
+  const tone = TONES[toneName];
+  const coast = new Path2D();
+  const found = new Path2D();
+  forEachEdge(data, cols, rows, (r, c, dir, a, b) => {
+    const voidA = isVoidCell(a);
+    const voidB = isVoidCell(b);
+    const path = voidA !== voidB ? coast : !voidA && isFoundCell(a) !== isFoundCell(b) ? found : null;
+    if (!path) return;
+    if (dir === 'v') {
+      const x = px(x0 + c + 1) + 0.5;
+      path.moveTo(x, py(y0 + r));
+      path.lineTo(x, py(y0 + r + 1));
+    } else {
+      const y = py(y0 + r + 1) + 0.5;
+      path.moveTo(px(x0 + c), y);
+      path.lineTo(px(x0 + c + 1), y);
+    }
+  });
+  ctx.lineCap = 'square';
+  ctx.lineWidth = Math.max(1, Math.min(2.4, zoom * 0.12));
+  ctx.strokeStyle = progress ? 'rgba(20, 40, 25, 0.75)' : tone.found;
+  ctx.stroke(found);
+  ctx.lineWidth = Math.max(1.4, Math.min(3, zoom * 0.16));
+  ctx.strokeStyle = progress ? 'rgba(220, 236, 228, 0.7)' : tone.coast;
+  ctx.stroke(coast);
+  ctx.lineCap = 'butt';
+}
+
+/** Gentle waves lapping at the shore: wavy lines just outside every stretch of coast. */
+function drawWaves(
+  ctx: CanvasRenderingContext2D,
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  x0: number,
+  y0: number,
+  px: (x: number) => number,
+  py: (y: number) => number,
+  zoom: number,
+  now: number,
+) {
+  const t = now / 700;
+  const amp = Math.min(3.2, zoom * 0.1);
+  const tone = TONES[toneName];
+  ctx.lineWidth = Math.max(1, Math.min(1.8, zoom * 0.08));
+  const lines: [Path2D, string, number][] = [
+    [new Path2D(), tone.foam, 0.22],
+    [new Path2D(), tone.foam.replace(/[\d.]+\)$/, '0.32)'), 0.5],
+  ];
+  forEachEdge(data, cols, rows, (r, c, dir, a, b) => {
+    const voidA = isVoidCell(a);
+    if (voidA === isVoidCell(b)) return;
+    // the normal points from the island into the sea
+    let nx = 0;
+    let ny = 0;
+    if (dir === 'v') nx = voidA ? -1 : 1;
+    else ny = voidA ? -1 : 1;
+    const ex = dir === 'v' ? px(x0 + c + 1) : px(x0 + c);
+    const ey = dir === 'v' ? py(y0 + r) : py(y0 + r + 1);
+    const len = zoom;
+    const tx = dir === 'v' ? 0 : len;
+    const ty = dir === 'v' ? len : 0;
+    const phase = t + (c + x0) * 0.9 + (r + y0) * 0.7;
+    for (let k = 0; k < lines.length; k++) {
+      const [path, , off] = lines[k];
+      const o = zoom * off + amp * Math.sin(phase + k * 1.7);
+      const sx = ex + nx * o;
+      const sy = ey + ny * o;
+      path.moveTo(sx, sy);
+      path.quadraticCurveTo(sx + tx / 2 + nx * amp * Math.cos(phase * 1.3 + k), sy + ty / 2 + ny * amp * Math.cos(phase * 1.3 + k), sx + tx, sy + ty);
+    }
+  });
+  for (const [path, colour] of lines) {
+    ctx.strokeStyle = colour;
+    ctx.stroke(path);
+  }
+}
+
+/** The ice clearer's marker: a little ice crystal. */
+function drawCrystal(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.lineCap = 'round';
+  for (const [width, colour] of [
+    [r * 0.62, '#1d4e6e'],
+    [r * 0.3, '#d9f4ff'],
+  ] as const) {
+    ctx.lineWidth = width;
+    ctx.strokeStyle = colour;
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = (k * Math.PI) / 3;
+      const [ca, sa] = [Math.cos(a), Math.sin(a)];
+      ctx.moveTo(0, 0);
+      ctx.lineTo(ca * r, sa * r);
+      // little branches
+      const bx = ca * r * 0.6;
+      const by = sa * r * 0.6;
+      for (const d of [0.9, -0.9]) {
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(a + d) * r * 0.34, by + Math.sin(a + d) * r * 0.34);
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**

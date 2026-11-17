@@ -19,6 +19,11 @@ export interface WorldConfig {
   /** Mine probability near the centre / far away (or at the coast). */
   density: number;
   maxDensity: number;
+  /**
+   * World-generation version. Absent (1) on older saves, so their islands look as before;
+   * 2 makes island features a fixed size, so bigger islands hold more biomes.
+   */
+  gen?: number;
 }
 
 export interface CamState {
@@ -50,7 +55,7 @@ export interface WorldMeta {
   updatedAt: number;
 }
 
-export const WORLDGEN_VERSION = 1;
+export const WORLDGEN_VERSION = 2;
 
 const DB_NAME = 'minefield';
 const WORLDS = 'worlds';

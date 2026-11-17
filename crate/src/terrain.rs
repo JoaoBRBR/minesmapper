@@ -11,6 +11,9 @@ use crate::noise::fbm;
 pub const CH: i32 = 32;
 pub const SEA: f32 = 0.42;
 
+/// Feature size on islands (generation 2+), relative to the endless world.
+const ISLAND_DETAIL: f32 = 0.6;
+
 pub const B_DEEP_OCEAN: u8 = 0;
 pub const B_OCEAN: u8 = 1;
 pub const B_BEACH: u8 = 2;
@@ -96,12 +99,14 @@ impl Terrain {
 
     /// Terrain whose elevation is pulled below sea level towards the edges of a
     /// `size` x `size` square, producing an island surrounded by water.
-    pub fn new_island(seed: u32, size: i32) -> Self {
-        Terrain {
-            seed,
-            island_half: size as f32 / 2.0,
-            detail: (size as f32 / 256.0).clamp(0.3, 1.0),
-        }
+    ///
+    /// `generation` 1 is the original look: the size of every feature grew with the island, so
+    /// small, medium and large islands were the same picture at different resolutions.
+    /// From generation 2 features have a fixed size in cells, so a bigger island holds more
+    /// coast, more mountains and many more biomes.
+    pub fn new_island(seed: u32, size: i32, generation: u32) -> Self {
+        let detail = if generation <= 1 { (size as f32 / 256.0).clamp(0.3, 1.0) } else { ISLAND_DETAIL };
+        Terrain { seed, island_half: size as f32 / 2.0, detail }
     }
 
     fn octaves<const N: usize>(&self, base: [(i32, f32); N]) -> [(i32, f32); N] {
@@ -233,5 +238,41 @@ mod tests {
             assert!(pct(n) < 35.0, "biome {b} dominates: {:.2}%", pct(n));
         }
         assert!((15.0..50.0).contains(&water), "water {water}%");
+    }
+
+    /// Average number of distinct land biomes on an island of this size (sampled every 3rd cell).
+    fn avg_land_biomes(size: i32, generation: u32) -> f64 {
+        let mut total = 0;
+        for seed in 0..6u32 {
+            let t = Terrain::new_island(seed, size, generation);
+            let mut seen = [false; BIOME_COUNT];
+            let h = size / 2;
+            for y in (-h..h).step_by(3) {
+                for x in (-h..h).step_by(3) {
+                    let (b, _) = t.cell(x, y);
+                    if b > B_OCEAN {
+                        seen[b as usize] = true;
+                    }
+                }
+            }
+            total += seen.iter().filter(|&&s| s).count();
+        }
+        total as f64 / 6.0
+    }
+
+    #[test]
+    fn bigger_islands_hold_more_biomes_from_generation_two() {
+        let (small, medium, large) = (avg_land_biomes(96, 2), avg_land_biomes(192, 2), avg_land_biomes(320, 2));
+        println!("land biomes on average: small {small:.1}, medium {medium:.1}, large {large:.1}");
+        assert!(small < medium && medium < large, "{small} {medium} {large}");
+        assert!(large >= small + 2.0, "small {small}, large {large}");
+    }
+
+    #[test]
+    fn generation_one_islands_still_look_the_same_at_every_size() {
+        // The original look is kept for old saves: features scaled with the island.
+        let (small, large) = (avg_land_biomes(96, 1), avg_land_biomes(320, 1));
+        println!("generation 1: small {small:.1}, large {large:.1}");
+        assert!((small - large).abs() < 2.0, "{small} vs {large}");
     }
 }

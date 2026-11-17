@@ -117,7 +117,7 @@ mod tests {
     fn islands_are_sane_for_many_seeds() {
         for seed in 0..40 {
             let size = 160;
-            let island = Island::build(&Terrain::new_island(seed, size), size);
+            let island = Island::build(&Terrain::new_island(seed, size, 2), size);
             let frac = island.land_count as f32 / (size * size) as f32;
             assert!((0.12..0.6).contains(&frac), "seed {seed}: land fraction {frac}");
             // the border is always water
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn playable_land_is_one_connected_mass() {
         let size = 128;
-        let island = Island::build(&Terrain::new_island(5, size), size);
+        let island = Island::build(&Terrain::new_island(5, size, 2), size);
         let h = island.half();
         let cells: Vec<(i32, i32)> = (-h..h)
             .flat_map(|y| (-h..h).map(move |x| (x, y)))
@@ -159,7 +159,7 @@ mod tests {
         let size = 192;
         let mut seeds_with_lakes = 0;
         for seed in 0..40 {
-            let terrain = Terrain::new_island(seed, size);
+            let terrain = Terrain::new_island(seed, size, 2);
             let island = Island::build(&terrain, size);
             let h = island.half();
             let water = |x: i32, y: i32| terrain.elevation(x, y) < SEA;
