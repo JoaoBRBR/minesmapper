@@ -155,6 +155,10 @@ export async function recordResult(id: string, stars: number, ms: number): Promi
   return !old || stars > old.stars;
 }
 
+/** Testing switch: every level is open. Set to false before release. */
+const UNLOCK_ALL = true;
+
 /** A level opens once the one before it has been finished. */
 export const isUnlocked = (progress: AdventureProgress, index: number) =>
+  UNLOCK_ALL ||
   index === 0 || (progress[LEVELS[index - 1].id]?.stars ?? 0) > 0;
