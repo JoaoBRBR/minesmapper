@@ -16,9 +16,9 @@ fn land_share(w: &World, x0: i32, y0: i32, x1: i32, y1: i32) -> f32 {
 fn main() {
     println!("-- tiny (48), want ~18 mines");
     for seed in 1..400u32 {
-        let w = World::new_island(seed, 48, 0.011, 0.022, 2);
+        let w = World::new_island(seed, 48, 0.0165, 0.033, 2);
         let m = w.mines_total();
-        if (17..=20).contains(&m) && w.land_total() > 900 {
+        if (20..=34).contains(&m) && w.land_total() > 900 {
             println!("seed {seed}: land {} mines {m} lakes {}", w.land_total(), w.lake_total());
         }
     }
