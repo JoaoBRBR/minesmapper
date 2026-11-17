@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Minefield: infinite & island minesweeper",
-  "short_name": "Minefield",
-  "description": "Minesweeper on an endless map or a big island, with a Rust/WASM engine.",
+  "name": "Mine's Mapper: a cartographer's minefield",
+  "short_name": "Mine's Mapper",
+  "description": "Chart an endless map or a big island and map out every mine, on old paper.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
