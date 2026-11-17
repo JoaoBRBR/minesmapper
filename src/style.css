@@ -931,3 +931,37 @@ input:not([type]) {
     text-align: center;
   }
 }
+
+/* ---- Long lists scroll inside their panel instead of stretching the menu ---- */
+#home-screen > .panel,
+#trophies > .panel {
+  display: flex;
+  flex-direction: column;
+  /* the screen has 16px of padding on top and 32px below */
+  max-height: calc(100vh - 56px);
+  max-height: calc(100dvh - 56px);
+}
+#worlds,
+#trophy-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 6px 2px 2px;
+  margin-right: -6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+#worlds::-webkit-scrollbar,
+#trophy-list::-webkit-scrollbar {
+  width: 8px;
+}
+#worlds::-webkit-scrollbar-thumb,
+#trophy-list::-webkit-scrollbar-thumb {
+  background: var(--edge-soft);
+  border-radius: 99px;
+}
+#home-screen .actions,
+#trophies .actions {
+  flex: none;
+}

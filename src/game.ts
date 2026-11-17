@@ -243,23 +243,55 @@ function zoomAt(px: number, py: number, factor: number) {
   cam.zoom = Math.min(MAX_ZOOM, Math.max(minZoom(), cam.zoom * factor));
   cam.cx = wx - (px - w / 2) / cam.zoom;
   cam.cy = wy - (py - h / 2) / cam.zoom;
+  glide = null;
   invalidate();
 }
 
 // Smoothly glide the camera back to the centre of the world.
-let glide: { fx: number; fy: number; t0: number } | null = null;
+let glide: {
+  fx: number;
+  fy: number;
+  fz: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  t0: number;
+  ms: number;
+} | null = null;
 const GLIDE_MS = 350;
+/** The first reveal of a world zooms in until about this many cells span the shorter screen side. */
+const FIRST_TAP_CELLS = 12;
+const FIRST_TAP_MS = 650;
+
+/** Smoothly moves (and zooms) the camera to a target; any drag or scroll takes over again. */
+function glideTo(tx: number, ty: number, tz: number, ms = GLIDE_MS) {
+  glide = { fx: cam.cx, fy: cam.cy, fz: cam.zoom, tx, ty, tz, t0: performance.now(), ms };
+}
 
 function recenter() {
-  glide = { fx: cam.cx, fy: cam.cy, t0: performance.now() };
+  glideTo(HOME.x, HOME.y, cam.zoom);
+}
+
+/** On a world's first reveal, move in a little on that region. */
+function focusOnFirstTap(x: number, y: number) {
+  const close = Math.min(60, Math.max(30, Math.min(w, h) / FIRST_TAP_CELLS));
+  const tz = Math.min(MAX_ZOOM, Math.max(cam.zoom, close));
+  if (animationsOn()) {
+    glideTo(x + 0.5, y + 0.5, tz, FIRST_TAP_MS);
+  } else {
+    cam.cx = x + 0.5;
+    cam.cy = y + 0.5;
+    cam.zoom = tz;
+  }
 }
 
 function stepGlide(now: number) {
   if (!glide) return;
-  const t = Math.min(1, (now - glide.t0) / GLIDE_MS);
+  const t = Math.min(1, (now - glide.t0) / glide.ms);
   const k = 1 - (1 - t) ** 3;
-  cam.cx = glide.fx + (HOME.x - glide.fx) * k;
-  cam.cy = glide.fy + (HOME.y - glide.fy) * k;
+  cam.cx = glide.fx + (glide.tx - glide.fx) * k;
+  cam.cy = glide.fy + (glide.ty - glide.fy) * k;
+  cam.zoom = glide.fz * (glide.tz / glide.fz) ** k; // zoom evenly, not linearly
   if (t >= 1) glide = null;
   invalidate();
 }
@@ -513,6 +545,7 @@ function activate(px: number, py: number, forceFlag: boolean) {
     wd.reveal(x, y);
   }
   feedback(before, x, y);
+  if (before.score === 0 && wd.score() > 0) focusOnFirstTap(x, y);
   invalidate();
   cb.onChange();
 }
@@ -832,6 +865,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__dev = {
     world: () => world,
     makeWorld,
+    camera: () => ({ cx: cam.cx, cy: cam.cy, zoom: cam.zoom }),
     invalidate,
     goto(x: number, y: number, zoom = 32) {
       cam.cx = x + 0.5;
