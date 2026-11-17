@@ -15,9 +15,9 @@
     />
     <meta name="theme-color" content="#e3d2a4" />
     <title>Mine's Mapper — a cartographer's minefield</title>
-    <script type="module" crossorigin src="./assets/index-CPuGHqM_.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/render-DPbiQjPh.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-D3xRqHmp.css">
+    <script type="module" crossorigin src="./assets/index-Dyi897xv.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/render-C-9euVI7.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-CTTMTyhA.css">
   </head>
   <body>
     <canvas id="bg" hidden aria-hidden="true"></canvas>
@@ -32,6 +32,7 @@
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
       <button id="iceclear" class="hud-extra" aria-pressed="false" hidden title="Make a whole stretch of water see-through (I)">❄ Ice clearer</button>
+      <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
       <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <span class="chip hud-extra" id="pos">0, 0</span>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
@@ -39,7 +40,18 @@
       </button>
     </div>
 
+    <!-- Floating Reveal/Flag switch for phones -->
+    <button id="fab" hidden aria-pressed="false" aria-label="Switch between revealing and flagging" title="Reveal / Flag">
+      <span id="fab-ico">⛏</span>
+    </button>
+
     <div id="toast" role="status" hidden></div>
+
+    <!-- Progress view: a simplified map of what you have found -->
+    <div id="progress-bar" hidden>
+      <span id="progress-text"></span>
+      <button id="progress-exit" class="primary">✕ Back to the map</button>
+    </div>
 
     <!-- End-of-game dialog: can be dismissed to look around the map. -->
     <div id="banner" class="dialog" hidden>
@@ -47,6 +59,7 @@
       <small id="banner-sub"></small>
       <div class="row">
         <button id="b-3d" class="primary" hidden>🌍 See it in 3D</button>
+        <button id="b-progress" hidden>📊 View progress</button>
         <button id="b-restart" class="primary">↻ Restart</button>
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
@@ -73,6 +86,7 @@
           <button type="button" data-v="flag">🚩 Flag</button>
         </div>
         <button id="m-center">⌖ Center on the start</button>
+        <button id="m-progress">📊 View progress</button>
         <button id="m-oracle" hidden>✨ Oracle</button>
         <button id="m-ice" hidden>❄ Ice clearer</button>
         <button id="m-3d" hidden>🌍 View the island in 3D</button>
@@ -80,6 +94,10 @@
         <label class="switch">
           <b>Reveal animations</b>
           <input type="checkbox" id="m-animations" data-setting="animations" />
+        </label>
+        <label class="switch">
+          <b>Shore waves</b>
+          <input type="checkbox" id="m-waves" data-setting="waves" />
         </label>
         <label class="switch">
           <b>Sound effects</b>
@@ -138,6 +156,16 @@
           <b>Reveal animations</b>
           <input type="checkbox" id="s-animations" data-setting="animations" />
           <small id="s-animations-hint">Cells ripple open; mines pop when you lose.</small>
+        </label>
+        <label class="switch">
+          <b>Shore waves</b>
+          <input type="checkbox" id="s-waves" data-setting="waves" />
+          <small>Gentle waves along island shores.</small>
+        </label>
+        <label class="switch">
+          <b>Keyboard movement</b>
+          <input type="checkbox" id="s-keyboardMove" data-setting="keyboardMove" />
+          <small>Desktop: arrow keys or WASD pan the map. Space reveals under the cursor, F flags it, M switches mode, P shows progress, +/- zoom.</small>
         </label>
         <label class="switch">
           <b>Sound effects</b>
@@ -200,6 +228,7 @@
         <div class="row actions">
           <button id="h-continue" class="primary" hidden>▶ Continue</button>
           <button id="h-new" class="primary">＋ New world</button>
+          <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
           <button id="h-trophies">🏆 Finished islands</button>
           <button id="h-stats">📊 Stats</button>
           <button id="h-settings" aria-label="Settings">⚙ Settings</button>
