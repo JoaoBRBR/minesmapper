@@ -106,6 +106,8 @@ const STATE_VERSION: i32 = 3;
 
 /// Hidden state with low nibble 0xF = not playable (water outside the island).
 pub const ST_VOID: u8 = 0x0f;
+/// Open sea inside a cleared chunk: still unplayable, but shown with its water colour.
+pub const ST_SEA: u8 = 0x0e;
 
 #[wasm_bindgen]
 pub struct World {
@@ -910,7 +912,12 @@ impl World {
                 } else if self.flagged.contains(&p) {
                     ST_FLAG | self.ice_bits(x, y, biome)
                 } else if self.island.is_some() && !self.is_playable(x, y) {
-                    ST_VOID
+                    // sea beside a finished shoreline chunk shows its water
+                    if last_clean.2 {
+                        ST_SEA
+                    } else {
+                        ST_VOID
+                    }
                 } else {
                     ST_HIDDEN | self.ice_bits(x, y, biome)
                 };
@@ -1594,5 +1601,40 @@ mod tests {
         assert_eq!(w.ice_used, 0);
         assert!(!w.import_state(&[3, 1, 0, 0, 1, 0, 0, 0, 0, 0]), "v3 needs the ice counters");
         assert!(w.import_state(&[3, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn sea_inside_a_cleared_coastal_chunk_shows_its_water() {
+        let mut w = World::new_island(9, 192, 0.12, 0.2);
+        let h = 96;
+        // A chunk with both island and open sea in it.
+        let (cx, cy) = (-h / CLEAN_CHUNK..h / CLEAN_CHUNK)
+            .flat_map(|cy| (-h / CLEAN_CHUNK..h / CLEAN_CHUNK).map(move |cx| (cx, cy)))
+            .find(|&(cx, cy)| {
+                let cells: Vec<bool> = (0..CLEAN_CHUNK * CLEAN_CHUNK)
+                    .map(|i| w.is_playable(cx * CLEAN_CHUNK + i % CLEAN_CHUNK, cy * CLEAN_CHUNK + i / CLEAN_CHUNK))
+                    .collect();
+                let land = cells.iter().filter(|&&p| p).count();
+                (60..200).contains(&land)
+            })
+            .expect("a coastal chunk");
+        let (x0, y0) = (cx * CLEAN_CHUNK, cy * CLEAN_CHUNK);
+        let first = (0..CLEAN_CHUNK * CLEAN_CHUNK)
+            .map(|i| (x0 + i % CLEAN_CHUNK, y0 + i / CLEAN_CHUNK))
+            .find(|&(x, y)| w.is_playable(x, y) && !w.is_mine(x, y))
+            .unwrap();
+        w.reveal(first.0, first.1);
+        // Before the chunk is finished, its sea is just unexplored paper.
+        let sea_cells: Vec<(i32, i32)> = (0..CLEAN_CHUNK * CLEAN_CHUNK)
+            .map(|i| (x0 + i % CLEAN_CHUNK, y0 + i / CLEAN_CHUNK))
+            .filter(|&(x, y)| !w.is_playable(x, y))
+            .collect();
+        assert!(!sea_cells.is_empty());
+        assert!(sea_cells.iter().all(|&(x, y)| w.view(x, y, 1, 1)[0] == ST_VOID));
+        clear_area(&mut w, x0, y0, x0 + CLEAN_CHUNK, y0 + CLEAN_CHUNK);
+        assert!(w.is_chunk_clean(cx, cy), "chunk should be finished");
+        assert!(sea_cells.iter().all(|&(x, y)| w.view(x, y, 1, 1)[0] == ST_SEA));
+        // Sea in a chunk that was not touched stays unexplored.
+        assert_eq!(w.view(-1000, 0, 1, 1)[0], ST_VOID);
     }
 }

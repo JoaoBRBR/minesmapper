@@ -19,6 +19,8 @@ const ST_REVEALED = 0x20;
 const ST_MINE = 0x30;
 /** Hidden + low nibble 0xF: unplayable water around the island. */
 const ST_VOID = 0x0f;
+/** Open sea inside a cleared chunk: unplayable, but drawn in its water colour. */
+const ST_SEA = 0x0e;
 /** Revealed cells: bit 7 = inside a tidied-up area (plain ground, no glyphs or grid)... */
 const ST_CLEAN = 0x80;
 /** ...and bit 6 = it held a power-up. */
@@ -134,6 +136,7 @@ export type ViewMode = 'play' | 'review' | 'preview';
 
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
+  if (b === ST_SEA) return CLEAR;
   if (b === ST_VOID) return view === 'review' ? CLEAR : PAPER;
   const state = b & ST_MASK;
   if (state === ST_REVEALED) return CLEAR;
@@ -205,7 +208,7 @@ export function draw(
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 3;
-      hasVoid ||= data[i] === ST_VOID;
+      hasVoid ||= data[i] === ST_VOID || data[i] === ST_SEA;
       hasTidy ||= isTidy(data[i]);
       ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
       ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
@@ -233,7 +236,7 @@ export function draw(
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const i = (r * cols + c) * 3;
-          if (data[i] !== ST_VOID && !isTidy(data[i])) continue;
+          if (data[i] !== ST_VOID && data[i] !== ST_SEA && !isTidy(data[i])) continue;
           ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
           ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
         }
