@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Regenerates the PNG app icons in public/ from the SVG sources (needs headless Chromium).
-#   public/icon.svg           -> icon-192.png, icon-512.png   (rounded, transparent corners)
-#   public/icon-maskable.svg  -> icon-maskable-512.png, apple-touch-icon.png (full bleed)
+# Sources are the hand-made SVGs in art/app/; they are copied into public/ first.
+#   art/app/icon.svg           -> icon-192.png, icon-512.png   (rounded, transparent corners)
+#   art/app/icon-maskable.svg  -> icon-maskable-512.png, apple-touch-icon.png (full bleed)
+#   art/app/favicon.svg        -> favicon.svg
 set -euo pipefail
 cd "$(dirname "$0")/../public"
+cp ../art/app/icon.svg ../art/app/icon-maskable.svg ../art/app/favicon.svg .
 CHROME="${CHROME:-chromium}"
 tmp="$(mktemp -d)"
 render() { # <svg> <size> <out>

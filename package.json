@@ -7,6 +7,7 @@
     "dev": "npm run wasm && vite",
     "build": "npm run wasm && tsc && vite build",
     "preview": "vite preview",
+    "icons": "bash scripts/make-icons.sh",
     "wasm": "wasm-pack build crate --target web --release --out-dir ../src/wasm/pkg --out-name minefield",
     "test": "cargo test --manifest-path crate/Cargo.toml",
     "deploy": "bash scripts/deploy-gh-pages.sh"
