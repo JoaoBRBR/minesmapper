@@ -251,15 +251,15 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   const smooth = blur(blur(elev, true), false);
   const edgeSmooth = blur(blur(blur(blur(edge, true), false), true), false); // rounds off the stair-steps of the distance
   const top = new Float32Array(count);
-  const bottom = new Float32Array(count);
   const colors = new Float32Array(count * 3);
   const reach = Math.max(4, half * 0.5);
+  let eMin = 1e9;
+  for (let i = 0; i < count; i++) if (land(i)) eMin = Math.min(eMin, edgeSmooth[i]);
   for (let i = 0; i < count; i++) {
-    const t = Math.min(1, edgeSmooth[i] / reach);
+    const t = Math.min(1, Math.max(0, edgeSmooth[i] - eMin) / reach); // 0 on the outermost rock, so top and underside meet
     const lump = Math.sqrt(t); // rounded: steep at the rim, flat on top
     const relief = land(i) ? (elev[i] - smooth[i]) * n * 0.7 : 0;
     top[i] = land(i) ? n * 0.1 * lump + relief : 0;
-    bottom[i] = land(i) ? -(n * 0.035 + n * 0.2 * lump) : 0;
     const c = BIOME_COLORS[cells[i * 2]] ?? BIOME_COLORS[14];
     const f = 0.92 + Math.max(-0.2, Math.min(0.3, relief / (n * 0.1)));
     colors.set([Math.min(1, (c[0] / 255) * f), Math.min(1, (c[1] / 255) * f), Math.min(1, (c[2] / 255) * f)], i * 3);
@@ -267,41 +267,138 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   const full = (qx: number, qz: number) =>
     qx >= 0 && qz >= 0 && qx < n - 1 && qz < n - 1 && land(qz * n + qx) && land(qz * n + qx + 1) && land((qz + 1) * n + qx) && land((qz + 1) * n + qx + 1);
 
+  // The outline of the rock is a staircase of cells. Slide the outermost vertices onto the smooth
+  // contour of a blurred mask, so the silhouette is round instead of toothed.
+  let mask = new Float32Array(count);
+  for (let i = 0; i < count; i++) mask[i] = land(i) ? 1 : 0;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const horizontal of [true, false]) {
+      const out = new Float32Array(count);
+      for (let iz = 0; iz < n; iz++) {
+        for (let ix = 0; ix < n; ix++) {
+          let sum = 0;
+          for (let d = -3; d <= 3; d++) {
+            const [x, z] = horizontal ? [ix + d, iz] : [ix, iz + d];
+            sum += x < 0 || z < 0 || x >= n || z >= n ? 0 : mask[z * n + x];
+          }
+          out[iz * n + ix] = sum / 7;
+        }
+      }
+      mask = out;
+    }
+  }
+  const offX = new Float32Array(count);
+  const offZ = new Float32Array(count);
+  const at = (x: number, z: number) => mask[Math.min(n - 1, Math.max(0, z)) * n + Math.min(n - 1, Math.max(0, x))];
+  for (let i = 0; i < count; i++) {
+    if (!land(i) || edge[i] > 3) continue;
+    const [ix, iz] = [i % n, Math.floor(i / n)];
+    const gx = (at(ix + 1, iz) - at(ix - 1, iz)) / 2;
+    const gz = (at(ix, iz + 1) - at(ix, iz - 1)) / 2;
+    const g2 = gx * gx + gz * gz;
+    if (g2 < 1e-5) continue;
+    const k = ((mask[i] - 0.5) / g2) * (edge[i] <= 1 ? 1 : 0.5);
+    const step = Math.hypot(gx, gz) * Math.abs(k);
+    const lim = step > 2 ? 2 / step : 1;
+    offX[i] = -gx * k * lim;
+    offZ[i] = -gz * k * lim;
+  }
   const pos: number[] = [];
   const col: number[] = [];
   const idx: number[] = [];
   const vertex = (i: number, y: number, shade: number) => {
     const iz = Math.floor(i / n);
     const ix = i % n;
-    pos.push(ix - half, y, iz - half);
+    pos.push(ix - half + offX[i], y, iz - half + offZ[i]);
     col.push(colors[i * 3] * shade, colors[i * 3 + 1] * shade, colors[i * 3 + 2] * shade);
     return pos.length / 3 - 1;
   };
   const topIdx = new Map<number, number>();
-  const botIdx = new Map<number, number>();
   const T = (i: number) => topIdx.get(i) ?? (topIdx.set(i, vertex(i, top[i], 1)), topIdx.get(i)!);
-  const B = (i: number) => botIdx.get(i) ?? (botIdx.set(i, vertex(i, bottom[i], 0.3)), botIdx.get(i)!);
   for (let qz = 0; qz < n - 1; qz++) {
     for (let qx = 0; qx < n - 1; qx++) {
       if (!full(qx, qz)) continue;
       const a = qz * n + qx;
       const [b, c, d] = [a + 1, a + n, a + n + 1];
       idx.push(T(a), T(c), T(b), T(b), T(c), T(d)); // top, facing up
-      idx.push(B(a), B(b), B(c), B(b), B(d), B(c)); // underside, facing down
     }
   }
-  // dark walls along every edge that has a full quad on one side only
-  const wall = (p: number, q: number) => {
-    idx.push(T(p), B(p), T(q), T(q), B(p), B(q));
+  // The underside is a separate smooth dome (not the grid, whose staircase outline made teeth):
+  // its edge follows the smoothed outline of the rock, and it bulges down like an egg.
+  const sample = (wx: number, wz: number) => {
+    const fx = Math.min(n - 1.001, Math.max(0, wx + half));
+    const fz = Math.min(n - 1.001, Math.max(0, wz + half));
+    const [x0, z0] = [Math.floor(fx), Math.floor(fz)];
+    const [tx, tz] = [fx - x0, fz - z0];
+    const m = (x: number, z: number) => mask[z * n + x];
+    return (m(x0, z0) * (1 - tx) + m(x0 + 1, z0) * tx) * (1 - tz) + (m(x0, z0 + 1) * (1 - tx) + m(x0 + 1, z0 + 1) * tx) * tz;
   };
-  for (let iz = 0; iz < n; iz++) {
-    for (let ix = 0; ix < n - 1; ix++) {
-      if (full(ix, iz - 1) !== full(ix, iz)) wall(iz * n + ix, iz * n + ix + 1); // horizontal edge
-    }
+  const K = 120;
+  let R = new Float32Array(K);
+  for (let k = 0; k < K; k++) {
+    const a = (k / K) * Math.PI * 2;
+    let r = half * 1.3;
+    while (r > 0 && sample(Math.cos(a) * r, Math.sin(a) * r) < 0.5) r -= 0.25;
+    R[k] = r;
   }
-  for (let iz = 0; iz < n - 1; iz++) {
-    for (let ix = 0; ix < n; ix++) {
-      if (full(ix - 1, iz) !== full(ix, iz)) wall(iz * n + ix, (iz + 1) * n + ix); // vertical edge
+  for (let pass = 0; pass < 3; pass++) {
+    const next = new Float32Array(K);
+    for (let k = 0; k < K; k++) {
+      let sum = 0;
+      for (let d = -3; d <= 3; d++) sum += R[(k + d + K) % K];
+      next[k] = sum / 7;
+    }
+    R = next;
+  }
+  const rings = 36;
+  const depth = n * 0.42;
+  const domeAt = (f: number, k: number) => {
+    const a = (k / K) * Math.PI * 2;
+    const r = f * (R[k % K] + 1.3);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const lumps = 1 + 0.1 * Math.sin(x * 0.33 + 1) * Math.sin(z * 0.29) + 0.06 * f * Math.sin(a * 3 + 0.7);
+    const y = -depth * Math.pow(Math.max(0, 1 - Math.pow(f, 2.4)), 1 / 2.4) * lumps;
+    // tint from the nearest bit of rock, darker the deeper it goes
+    const ci = Math.min(n - 1, Math.max(0, Math.round(x + half)));
+    const cj = Math.min(n - 1, Math.max(0, Math.round(z + half)));
+    let best = cj * n + ci;
+    if (!land(best)) {
+      let d2 = 1e9;
+      for (let dz = -3; dz <= 3; dz++)
+        for (let dx = -3; dx <= 3; dx++) {
+          const [px, pz] = [ci + dx, cj + dz];
+          if (px < 0 || pz < 0 || px >= n || pz >= n || !land(pz * n + px)) continue;
+          if (dx * dx + dz * dz < d2) {
+            d2 = dx * dx + dz * dz;
+            best = pz * n + px;
+          }
+        }
+    }
+    const shade = 0.82 - 0.32 * (1 - Math.pow(1 - f, 2));
+    const c = BIOME_COLORS[cells[best * 2]] ?? BIOME_COLORS[14];
+    const base = BIOME_COLORS[14];
+    const mix = Math.min(1, 0.45 + (1 - f) * 0.5); // towards one plain rock colour, so the pole is not streaky
+    pos.push(x, y, z);
+    col.push(
+      ((c[0] * (1 - mix) + base[0] * mix) / 255) * shade,
+      ((c[1] * (1 - mix) + base[1] * mix) / 255) * shade,
+      ((c[2] * (1 - mix) + base[2] * mix) / 255) * shade,
+    );
+    return pos.length / 3 - 1;
+  };
+  const tip = domeAt(0, 0);
+  const ring: number[][] = [];
+  for (let j = 1; j <= rings; j++) {
+    const r: number[] = [];
+    for (let k = 0; k < K; k++) r.push(domeAt(j / rings, k));
+    ring.push(r);
+  }
+  for (let k = 0; k < K; k++) idx.push(tip, ring[0][k], ring[0][(k + 1) % K]);
+  for (let j = 0; j < rings - 1; j++) {
+    for (let k = 0; k < K; k++) {
+      const [a0, a1, b0, b1] = [ring[j][k], ring[j][(k + 1) % K], ring[j + 1][k], ring[j + 1][(k + 1) % K]];
+      idx.push(a0, b0, a1, a1, b0, b1);
     }
   }
   const rock = new BufferGeometry();
@@ -329,10 +426,13 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   const starMaterial = new PointsMaterial({ color: 0xffffff, size: n * 0.06, sizeAttenuation: true });
   scene.add(new Points(stars, starMaterial));
 
-  scene.add(new HemisphereLight(0xb8c8ff, 0x20202a, 0.7));
+  scene.add(new HemisphereLight(0xb8c8ff, 0x55556a, 0.9));
   const sun = new DirectionalLight(0xfff4dc, 2.1);
   sun.position.set(-n * 0.9, n * 0.9, -n * 0.4);
   scene.add(sun);
+  const fill = new DirectionalLight(0x8fa0d8, 0.9); // soft light from below, so the underside is readable
+  fill.position.set(n * 0.6, -n * 0.9, n * 0.5);
+  scene.add(fill);
 
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
