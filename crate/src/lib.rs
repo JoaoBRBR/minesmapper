@@ -103,7 +103,10 @@ pub const ST_CLEAN: u8 = 0x80;
 pub const ST_POWERUP: u8 = 0x40;
 pub const ST_MINE: u8 = 0x30; // low bit 1 = exploded, 0 = shown after loss
 /// Bump when the `export_state` layout changes.
-const STATE_VERSION: i32 = 4;
+const STATE_VERSION: i32 = 5;
+
+/// In space, this share of the mines are negative: they subtract from the numbers around them.
+const NEGATIVE_RATE: f64 = 0.4;
 
 /// Hidden state with low nibble 0xF = not playable (water outside the island).
 pub const ST_VOID: u8 = 0x0f;
@@ -124,6 +127,8 @@ pub struct World {
     safe_origin: Option<(i32, i32)>,
     revealed: HashSet<(i32, i32)>,
     flagged: HashSet<(i32, i32)>,
+    /// Flags the player marked as negative mines (always a subset of `flagged`).
+    neg_flags: HashSet<(i32, i32)>,
     exploded: HashSet<(i32, i32)>,
     game_over: bool,
     won: bool,
@@ -155,6 +160,8 @@ pub struct World {
     goal: Goal,
     /// Where the very first tap may land `(x0, y0, x1, y1)`, inclusive; `None` = anywhere allowed.
     first_area: Option<(i32, i32, i32, i32)>,
+    /// Moons and meteors: craters, void, and negative mines.
+    space: bool,
 }
 
 /// What wins the game besides clearing the whole island.
@@ -185,6 +192,7 @@ impl World {
             safe_origin: None,
             revealed: HashSet::new(),
             flagged: HashSet::new(),
+            neg_flags: HashSet::new(),
             exploded: HashSet::new(),
             game_over: false,
             won: false,
@@ -206,7 +214,24 @@ impl World {
             hearts_max: 0,
             goal: Goal::None,
             first_area: None,
+            space: false,
         }
+    }
+
+    /// Turns the world into a moon (endless) or a meteor (island): crater terrain, void instead of
+    /// water, and negative mines. Call it right after creating the world, before any move.
+    pub fn set_space(&mut self, on: bool) {
+        self.space = on;
+        self.terrain = self.terrain.with_space(on);
+        if let Some(island) = &self.island {
+            self.island = Some(Island::build(&self.terrain, island.size));
+        }
+        self.chunks.borrow_mut().clear();
+        self.recount_mines();
+    }
+
+    pub fn is_space(&self) -> bool {
+        self.space
     }
 
     /// Mistakes allowed before the game is lost (0 = the first mine ends the game).
@@ -395,6 +420,14 @@ impl World {
             out.push(x);
             out.push(y);
         }
+        // Version 5: which flags are negative.
+        let mut neg: Vec<(i32, i32)> = self.neg_flags.iter().copied().collect();
+        neg.sort_unstable();
+        out.push(neg.len() as i32);
+        for (x, y) in neg {
+            out.push(x);
+            out.push(y);
+        }
         out
     }
 
@@ -462,6 +495,14 @@ impl World {
         } else {
             None
         };
+        let neg_flags = if version >= 5 {
+            match read_set(data, &mut pos) {
+                Some(n) => n,
+                None => return false,
+            }
+        } else {
+            HashSet::new()
+        };
         if pos != data.len() {
             return false;
         }
@@ -470,6 +511,7 @@ impl World {
         self.game_over = flags & 2 != 0;
         self.won = flags & 4 != 0;
         self.revealed = revealed;
+        self.neg_flags = neg_flags.intersection(&flagged).copied().collect();
         self.flagged = flagged;
         self.exploded = exploded;
         self.collected = collected.unwrap_or_else(|| {
@@ -659,23 +701,31 @@ impl World {
         }
     }
 
-    /// The number shown on a revealed cell. Mines hidden inside tidied-up ground are left
-    /// out, so the number only counts mines the player can still see or has yet to find.
-    fn display_count(&self, x: i32, y: i32) -> u8 {
-        let n = self.adjacent(x, y);
-        if n == 0 || self.game_over || self.clean_chunks.is_empty() {
-            return n;
-        }
-        let mut hidden = 0;
+    /// The number shown on a revealed cell, as (size, is negative, is a "0" that hides mines).
+    /// Mines hidden inside tidied-up ground are left out, so the number only counts mines the
+    /// player can still see or has yet to find. In space the number is the sum of the positive
+    /// mines minus the negative ones: a blank cell has no mines around it, while a "0" means
+    /// they cancel out.
+    fn display_info(&self, x: i32, y: i32) -> (u8, bool, bool) {
+        let tidy = !(self.game_over || self.clean_chunks.is_empty());
+        let (mut count, mut sum) = (0i32, 0i32);
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let (nx, ny) = (x + dx, y + dy);
-                if (dx != 0 || dy != 0) && self.is_settled(nx, ny) && self.is_mine(nx, ny) {
-                    hidden += 1;
+                if (dx != 0 || dy != 0) && self.is_mine(nx, ny) && !(tidy && self.is_settled(nx, ny)) {
+                    count += 1;
+                    sum += self.mine_sign(nx, ny);
                 }
             }
         }
-        n - hidden
+        if !self.space {
+            return (count as u8, false, false);
+        }
+        if count == 0 {
+            (0, false, false)
+        } else {
+            (sum.unsigned_abs() as u8, sum < 0, sum == 0)
+        }
     }
 
     /// Counts a newly revealed safe cell towards its chunk, marking the chunk
@@ -753,7 +803,7 @@ impl World {
 
     /// Whether a (safe) cell hides an ice clearer. Random, fixed rate, deterministic from the seed.
     pub fn is_iceclearer(&self, x: i32, y: i32) -> bool {
-        if !self.is_playable(x, y) || self.is_mine(x, y) {
+        if self.space || !self.is_playable(x, y) || self.is_mine(x, y) {
             return false;
         }
         let threshold = (ICE_CLEARER_RATE * u32::MAX as f64) as u32;
@@ -824,10 +874,16 @@ impl World {
                 return 3;
             }
             self.flagged.insert((x, y));
+            if self.is_negative(x, y) {
+                self.neg_flags.insert((x, y));
+            } else {
+                self.neg_flags.remove(&(x, y));
+            }
             self.powerups_used += 1;
             2
         } else {
             self.flagged.remove(&(x, y));
+            self.neg_flags.remove(&(x, y));
             self.powerups_used += 1;
             self.reveal_unchecked(x, y);
             1
@@ -868,6 +924,18 @@ impl World {
         }
         let threshold = (self.density_at(x, y) as f64 * u32::MAX as f64) as u32;
         hash(self.seed, x, y) < threshold
+    }
+
+    /// A negative mine (space only): it counts as -1 in the numbers around it.
+    pub fn is_negative(&self, x: i32, y: i32) -> bool {
+        self.space
+            && self.is_mine(x, y)
+            && (hash(self.seed ^ 0x6e65_6761, x, y) as f64) < NEGATIVE_RATE * u32::MAX as f64
+    }
+
+    /// +1 for a normal mine, -1 for a negative one.
+    fn mine_sign(&self, x: i32, y: i32) -> i32 {
+        if self.is_negative(x, y) { -1 } else { 1 }
     }
 
     fn chunk(&self, cx: i32, cy: i32) -> Rc<Vec<u8>> {
@@ -976,22 +1044,51 @@ impl World {
         std::mem::take(&mut self.reveal_log)
     }
 
-    /// Toggles a flag on a hidden cell. Returns true if the cell is now flagged.
-    pub fn toggle_flag(&mut self, x: i32, y: i32) -> bool {
-        if self.game_over
+    fn can_mark(&self, x: i32, y: i32) -> bool {
+        !(self.game_over
             || self.won
             || !self.is_playable(x, y)
             || self.revealed.contains(&(x, y))
             || self.exploded.contains(&(x, y))
-            || self.is_settled(x, y)
-        {
+            || self.is_settled(x, y))
+    }
+
+    /// Toggles a flag on a hidden cell. Returns true if the cell is now flagged. Tapping a cell that
+    /// carries the other kind of flag turns it into this kind instead of removing it.
+    pub fn toggle_flag(&mut self, x: i32, y: i32) -> bool {
+        if !self.can_mark(x, y) {
             return false;
         }
-        if !self.flagged.remove(&(x, y)) {
-            self.flagged.insert((x, y));
-            return true;
+        let p = (x, y);
+        if self.flagged.contains(&p) && !self.neg_flags.contains(&p) {
+            self.flagged.remove(&p);
+            return false;
         }
-        false
+        self.flagged.insert(p);
+        self.neg_flags.remove(&p);
+        true
+    }
+
+    /// Like `toggle_flag`, for the negative (purple) flag. Only meaningful in space.
+    pub fn toggle_flag_negative(&mut self, x: i32, y: i32) -> bool {
+        if !self.space {
+            return self.toggle_flag(x, y);
+        }
+        if !self.can_mark(x, y) {
+            return false;
+        }
+        let p = (x, y);
+        if self.neg_flags.remove(&p) {
+            self.flagged.remove(&p);
+            return false;
+        }
+        self.flagged.insert(p);
+        self.neg_flags.insert(p);
+        true
+    }
+
+    pub fn is_negative_flag(&self, x: i32, y: i32) -> bool {
+        self.neg_flags.contains(&(x, y))
     }
 
     /// Chording: on a revealed number whose flags match its count, reveal the
@@ -1004,19 +1101,25 @@ impl World {
         if n == 0 {
             return 0;
         }
-        let mut flags = 0;
+        let (mut flags, mut flag_sum, mut true_sum) = (0, 0, 0);
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let p = (x + dx, y + dy);
-                // Mines hidden inside tidied-up ground count as marked.
-                if self.flagged.contains(&p)
-                    || self.exploded.contains(&p)
-                    || (self.is_settled(p.0, p.1) && self.is_mine(p.0, p.1)) {
+                if (dx != 0 || dy != 0) && self.is_mine(p.0, p.1) {
+                    true_sum += self.mine_sign(p.0, p.1);
+                }
+                // Mines hidden inside tidied-up ground count as marked, and so do exploded ones.
+                if self.flagged.contains(&p) {
                     flags += 1;
+                    flag_sum += if self.neg_flags.contains(&p) { -1 } else { 1 };
+                } else if self.exploded.contains(&p) || (self.is_settled(p.0, p.1) && self.is_mine(p.0, p.1)) {
+                    flags += 1;
+                    flag_sum += self.mine_sign(p.0, p.1);
                 }
             }
         }
-        if flags != n {
+        // In space the signs must add up too, not just the number of flags.
+        if flags != n || (self.space && flag_sum != true_sum) {
             return 0;
         }
         let mut total = 0;
@@ -1053,13 +1156,15 @@ impl World {
                 }
                 let i = ((y.rem_euclid(CH) * CH + x.rem_euclid(CH)) * 2) as usize;
                 let biome = chunk[i];
+                let mut info = (0u8, false, false);
                 let state = if self.exploded.contains(&p) {
                     ST_MINE | 1
                 } else if settled {
                     ST_CLEAN | ST_REVEALED
                 } else if self.revealed.contains(&p) {
+                    info = self.display_info(x, y);
                     ST_REVEALED
-                        | self.display_count(x, y)
+                        | info.0
                         | if (self.is_powerup(x, y) || self.is_iceclearer(x, y)) && !self.collected.contains(&p) { ST_POWERUP } else { 0 }
                 } else if self.game_over && self.is_mine(x, y) {
                     ST_MINE
@@ -1080,6 +1185,20 @@ impl World {
                 let mut shade = chunk[i + 1] & 0xf8;
                 if state & 0x30 == ST_REVEALED && state & ST_CLEAN == 0 && self.is_iceclearer(x, y) {
                     shade |= 1;
+                }
+                // Space: bit 1 = a negative number, a negative flag or a negative mine; bit 2 = a "0" that hides mines.
+                if self.space {
+                    match state & 0x30 {
+                        ST_REVEALED if state & ST_CLEAN == 0 => {
+                            if info.1 { shade |= 2; }
+                            if info.2 { shade |= 4; }
+                        }
+                        ST_FLAG if self.neg_flags.contains(&p) => shade |= 2,
+                        _ => {}
+                    }
+                    if state & 0x30 == ST_MINE && self.is_negative(x, y) {
+                        shade |= 2;
+                    }
                 }
                 out.push(state);
                 out.push(biome);
@@ -1445,6 +1564,121 @@ mod tests {
         let calm = count(0.15, 200); // ~0.12% of ~34k safe cells
         assert!((15..90).contains(&calm), "calm: {calm}");
         assert!(hard as f64 / 120.0f64.powi(2) > calm as f64 / 200.0f64.powi(2) * 10.0);
+    }
+
+    fn space_world() -> World {
+        let mut w = World::new_island(7, 96, 0.14, 0.2, 2);
+        w.set_space(true);
+        w
+    }
+
+    #[test]
+    fn space_has_craters_no_lakes_and_negative_mines() {
+        let w = space_world();
+        assert!(w.is_space());
+        assert_eq!(w.lake_total(), 0);
+        let (mut mines, mut neg) = (0, 0);
+        for y in -48..48 {
+            for x in -48..48 {
+                if w.is_mine(x, y) {
+                    mines += 1;
+                    if w.is_negative(x, y) {
+                        neg += 1;
+                    }
+                }
+            }
+        }
+        let share = neg as f64 / mines as f64;
+        assert!((0.3..0.5).contains(&share), "negative share {share}");
+        // the overworld never has them
+        let o = World::new_island(7, 96, 0.14, 0.2, 2);
+        assert!((-48..48).all(|y| (-48..48).all(|x| !o.is_negative(x, y))));
+    }
+
+    #[test]
+    fn space_numbers_are_signed_sums_and_blank_means_no_mines() {
+        let mut w = space_world();
+        w.reveal(0, 0);
+        let (mut blank, mut zero_hiding, mut negative) = (0, 0, 0);
+        for y in -30..30 {
+            for x in -30..30 {
+                if !w.revealed.contains(&(x, y)) {
+                    continue;
+                }
+                let (mag, neg, zero) = w.display_info(x, y);
+                let mut sum = 0;
+                let mut count = 0;
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        if (dx != 0 || dy != 0) && w.is_mine(x + dx, y + dy) {
+                            count += 1;
+                            sum += w.mine_sign(x + dx, y + dy);
+                        }
+                    }
+                }
+                assert_eq!(count == 0, mag == 0 && !zero, "blank only when no mines ({x},{y})");
+                assert_eq!(sum.unsigned_abs() as u8, mag);
+                assert_eq!(neg, sum < 0);
+                if count == 0 { blank += 1 } else if zero { zero_hiding += 1 }
+                if neg { negative += 1 }
+            }
+        }
+        assert!(blank > 0 && negative > 0, "blank {blank} negative {negative} zero {zero_hiding}");
+    }
+
+    #[test]
+    fn flags_come_in_two_kinds_and_chording_checks_the_signs() {
+        let mut w = space_world();
+        w.reveal(0, 0);
+        // a revealed cell with exactly two mines around it, one of each sign
+        let mut found = None;
+        'outer: for y in -40..40 {
+            for x in -40..40 {
+                if !w.revealed.contains(&(x, y)) { continue; }
+                let ms: Vec<(i32, i32)> = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+                    .filter(|&(a, b)| (a, b) != (x, y) && w.is_mine(a, b))
+                    .collect();
+                if ms.len() == 2 && w.is_negative(ms[0].0, ms[0].1) != w.is_negative(ms[1].0, ms[1].1) {
+                    found = Some(((x, y), ms));
+                    break 'outer;
+                }
+            }
+        }
+        let ((x, y), ms) = found.expect("a +/- pair somewhere");
+        let (a, b) = (ms[0], ms[1]);
+        // wrong kinds on the right cells: signs do not add up, so nothing opens
+        assert!(w.toggle_flag(a.0, a.1));
+        assert!(w.toggle_flag(b.0, b.1));
+        let both_positive_sum = 2;
+        let true_sum = w.mine_sign(a.0, a.1) + w.mine_sign(b.0, b.1);
+        assert_ne!(both_positive_sum, true_sum);
+        assert_eq!(w.chord(x, y), 0, "two positive flags do not match a +/- pair");
+        // fix the negative one: tapping the other kind converts it
+        let neg = if w.is_negative(a.0, a.1) { a } else { b };
+        assert!(w.toggle_flag_negative(neg.0, neg.1));
+        assert!(w.is_negative_flag(neg.0, neg.1));
+        assert_eq!(w.flag_count(), 2, "converting keeps the flag");
+        w.chord(x, y); // now allowed; it must not explode anything
+        assert_eq!(w.mistakes(), 0);
+        // tapping the same kind again removes it
+        assert!(!w.toggle_flag_negative(neg.0, neg.1));
+    }
+
+    #[test]
+    fn space_state_round_trips_with_negative_flags() {
+        let mut w = space_world();
+        w.reveal(0, 0);
+        let m = (-48..48)
+            .flat_map(|y| (-48..48).map(move |x| (x, y)))
+            .find(|&(x, y)| w.is_mine(x, y) && !w.revealed.contains(&(x, y)))
+            .unwrap();
+        assert!(w.toggle_flag_negative(m.0, m.1));
+        let saved = w.export_state();
+        let mut b = space_world();
+        assert!(b.import_state(&saved));
+        assert!(b.is_negative_flag(m.0, m.1));
+        assert_eq!(b.flag_count(), 1);
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //!   (light from the north-west) plus a little altitude brightening.
 
 use crate::island::Island;
-use crate::noise::fbm;
+use crate::noise::{fbm, hash};
 
 pub const CH: i32 = 32;
 pub const SEA: f32 = 0.42;
@@ -30,6 +30,18 @@ pub const B_ROCK: u8 = 12;
 pub const B_SNOW: u8 = 13;
 #[allow(dead_code)]
 pub const BIOME_COUNT: usize = 14;
+
+// Space biomes (moons and meteors): the same ids continue after the overworld ones.
+pub const B_REGOLITH: u8 = 14;
+pub const B_CRATER_FLOOR: u8 = 15;
+pub const B_CRATER_RIM: u8 = 16;
+pub const B_MOON_ICE: u8 = 17;
+/// All biome ids, overworld and space.
+pub const BIOME_TOTAL: usize = 18;
+
+/// Crater layers: grid cell size, smallest and largest radius, and chance (out of 256) that a grid
+/// cell holds a crater. Big, medium and small ones overlap, which gives a believable pocked surface.
+const CRATER_LAYERS: [(i32, f32, f32, u32); 3] = [(96, 16.0, 34.0, 210), (40, 6.0, 15.0, 200), (16, 2.5, 5.5, 160)];
 
 fn contrast(v: f32, k: f32) -> f32 {
     ((v - 0.5) * k + 0.5).clamp(0.0, 1.0)
@@ -85,6 +97,8 @@ pub struct Terrain {
     island_half: f32,
     /// Multiplier on noise feature size (smaller islands get finer detail).
     detail: f32,
+    /// Moons and meteors: craters instead of overworld biomes, void instead of water.
+    space: bool,
 }
 
 fn smoothstep(t: f32) -> f32 {
@@ -94,7 +108,7 @@ fn smoothstep(t: f32) -> f32 {
 
 impl Terrain {
     pub fn new(seed: u32) -> Self {
-        Terrain { seed, island_half: 0.0, detail: 1.0 }
+        Terrain { seed, island_half: 0.0, detail: 1.0, space: false }
     }
 
     /// Terrain whose elevation is pulled below sea level towards the edges of a
@@ -106,7 +120,76 @@ impl Terrain {
     /// coast, more mountains and many more biomes.
     pub fn new_island(seed: u32, size: i32, generation: u32) -> Self {
         let detail = if generation <= 1 { (size as f32 / 256.0).clamp(0.3, 1.0) } else { ISLAND_DETAIL };
-        Terrain { seed, island_half: size as f32 / 2.0, detail }
+        Terrain { seed, island_half: size as f32 / 2.0, detail, space: false }
+    }
+
+    /// The same terrain seen as a moon (endless) or a meteor (island): craters, no water.
+    pub fn with_space(mut self, on: bool) -> Self {
+        self.space = on;
+        self
+    }
+
+    /// Height offset and surface class from every crater covering this cell.
+    /// Class: 0 plain, 1 floor, 2 rim, 3 ejecta blanket, 4 ice in a deep floor.
+    fn crater_at(&self, x: i32, y: i32) -> (f32, u8) {
+        let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+        let mut height = 0.0f32;
+        let mut best = (f32::MAX, 0u8);
+        for (li, &(g, rmin, rmax, presence)) in CRATER_LAYERS.iter().enumerate() {
+            let salt = 0xC0FF_EE00u32.wrapping_add(li as u32 * 0x9E37);
+            let (gx0, gy0) = (x.div_euclid(g), y.div_euclid(g));
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let (gx, gy) = (gx0 + dx, gy0 + dy);
+                    let h = hash(self.seed ^ salt, gx, gy);
+                    if (h & 0xff) >= presence {
+                        continue;
+                    }
+                    let h2 = hash(self.seed ^ salt ^ 0x5bd1_e995, gx, gy);
+                    let cx = (gx * g) as f32 + ((h >> 8) & 0xff) as f32 / 256.0 * g as f32;
+                    let cy = (gy * g) as f32 + ((h2 >> 8) & 0xff) as f32 / 256.0 * g as f32;
+                    let r = rmin + (h2 & 0xff) as f32 / 255.0 * (rmax - rmin);
+                    let t = ((fx - cx).powi(2) + (fy - cy).powi(2)).sqrt() / r;
+                    if t > 1.8 {
+                        continue;
+                    }
+                    let depth = 0.085 * (0.5 + 0.5 * r / rmax);
+                    let bowl = if t < 0.9 { -depth * (1.0 - (t / 0.9).powi(2)) } else { 0.0 };
+                    let rim = depth * 0.45 * (-((t - 1.0) / 0.2).powi(2)).exp();
+                    height += bowl + rim;
+                    if t < best.0 {
+                        let class = if t < 0.88 {
+                            if li < 2 && t < 0.55 && (h >> 16) & 7 == 0 { 4 } else { 1 }
+                        } else if t < 1.12 {
+                            2
+                        } else if t < 1.5 {
+                            3
+                        } else {
+                            0
+                        };
+                        best = (t, class);
+                    }
+                }
+            }
+        }
+        (height, best.1)
+    }
+
+    fn space_elevation(&self, x: i32, y: i32) -> f32 {
+        let o = self.octaves([(96, 0.50), (40, 0.28), (16, 0.14), (6, 0.08)]);
+        let e = contrast(fbm(self.seed ^ 0x1111_1111, x, y, &o), 1.7);
+        let (craters, _) = self.crater_at(x, y);
+        if self.island_half <= 0.0 {
+            // a moon: solid ground as far as you can go
+            return (SEA + 0.14 + (e - 0.5) * 0.08 + craters).max(SEA + 0.02);
+        }
+        // a meteor: a lumpy rock in the void, its edge bitten by craters, no holes in the middle
+        let dn = ((x as f32 + 0.5).powi(2) + (y as f32 + 0.5).powi(2)).sqrt() / self.island_half;
+        let shaped = 0.5 + (e - 0.5) * 0.55;
+        let offset = 0.18 * (1.0 - smoothstep(dn / 0.6)) - 0.8 * smoothstep((dn - 0.65) / 0.35);
+        let v = shaped + offset + craters * 0.7;
+        let v = if dn < 0.7 { v.max(SEA + 0.02) } else { v };
+        v.clamp(0.0, 1.0)
     }
 
     fn octaves<const N: usize>(&self, base: [(i32, f32); N]) -> [(i32, f32); N] {
@@ -114,6 +197,9 @@ impl Terrain {
     }
 
     pub fn elevation(&self, x: i32, y: i32) -> f32 {
+        if self.space {
+            return self.space_elevation(x, y);
+        }
         let o = self.octaves([(96, 0.50), (40, 0.28), (16, 0.14), (6, 0.08)]);
         let e = contrast(fbm(self.seed ^ 0x1111_1111, x, y, &o), 1.7);
         if self.island_half <= 0.0 {
@@ -142,6 +228,19 @@ impl Terrain {
             let depth = (e / SEA).clamp(0.0, 1.0); // 0 = abyss, 1 = shoreline
             let biome = if e < 0.28 { B_DEEP_OCEAN } else { B_OCEAN };
             return (biome, (30.0 + depth * 190.0) as u8);
+        }
+        if self.space {
+            let (_, class) = self.crater_at(x, y);
+            let boulders = self.moisture(x, y) > 0.78;
+            let (biome, tint) = match class {
+                1 => (B_CRATER_FLOOR, -14.0),
+                4 => (B_MOON_ICE, 0.0),
+                2 => (B_CRATER_RIM, 20.0),
+                3 => (B_REGOLITH, 8.0),
+                _ => (if boulders { B_ROCK } else { B_REGOLITH }, 0.0),
+            };
+            let shade = 128.0 + (e_nw - e_se) * 900.0 + tint;
+            return (biome, shade.clamp(0.0, 255.0) as u8);
         }
         let h = ((e - SEA) / (1.0 - SEA)).clamp(0.0, 1.0);
         let biome = classify(h, self.moisture(x, y), self.temperature(x, y));
@@ -274,5 +373,35 @@ mod tests {
         let (small, large) = (avg_land_biomes(96, 1), avg_land_biomes(320, 1));
         println!("generation 1: small {small:.1}, large {large:.1}");
         assert!((small - large).abs() < 2.0, "{small} vs {large}");
+    }
+
+    #[test]
+    fn moons_have_craters_and_no_water() {
+        let t = Terrain::new(5).with_space(true);
+        let mut counts = [0u32; BIOME_TOTAL];
+        for y in (-400..400).step_by(3) {
+            for x in (-400..400).step_by(3) {
+                counts[t.cell(x, y).0 as usize] += 1;
+            }
+        }
+        println!("moon biomes {counts:?}");
+        assert_eq!(counts[B_OCEAN as usize] + counts[B_DEEP_OCEAN as usize], 0, "a moon has no void");
+        for b in [B_REGOLITH, B_CRATER_FLOOR, B_CRATER_RIM] {
+            assert!(counts[b as usize] > 200, "biome {b}: {}", counts[b as usize]);
+        }
+        assert_eq!(t.cell(77, -31), t.cell(77, -31));
+    }
+
+    #[test]
+    fn meteors_are_rock_in_the_void_without_inner_holes() {
+        let t = Terrain::new_island(11, 96, 2).with_space(true);
+        for y in -34..34 {
+            for x in -34..34 {
+                if x * x + y * y <= 32 * 32 {
+                    assert!(t.cell(x, y).0 > B_OCEAN, "hole inside the rock at ({x},{y})");
+                }
+            }
+        }
+        assert!(t.cell(60, 0).0 <= B_OCEAN, "void outside");
     }
 }
