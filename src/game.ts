@@ -1067,6 +1067,13 @@ function endPointer(e: PointerEvent, cancelled: boolean) {
   pointers.delete(e.pointerId);
   clearTimeout(pressTimer);
   if (cancelled || !wasSingle || dragged || longPressed) return;
+  // Shift + click places a negative flag (space maps only)
+  if (e.shiftKey && world?.is_space() && !progressView) {
+    kindOverride = true;
+    activate(e.clientX, e.clientY, true);
+    kindOverride = null;
+    return;
+  }
   handleTap(e.clientX, e.clientY, e.button === 2);
 }
 
@@ -1218,6 +1225,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (menuOpen) return;
+  // Ctrl switches the reveal / flag toggle
+  if (k === 'control') {
+    if (!e.repeat) toggleFlagMode();
+    return;
+  }
   if (settings.keyboardMove && k in PAN_KEYS) {
     heldKeys.add(k);
     glide = null;

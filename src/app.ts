@@ -194,9 +194,12 @@ function describe(m: WorldMeta) {
   return { line1: `${mode} · ${c.difficulty}`, line2: `${progress}${time}` };
 }
 
+/** Testing switch: lets every island be viewed in 3D, not only cleared ones. */
+const VIEW_3D_ANY = true;
+
 /** Only islands you have cleared can be viewed in 3D. */
 function canView3D(m: WorldMeta) {
-  return m.config.mode === 'island' && m.status === 'won';
+  return m.config.mode === 'island' && (VIEW_3D_ANY || m.status === 'won');
 }
 
 function worldCard(m: WorldMeta) {
@@ -319,10 +322,11 @@ async function openViewer(meta: WorldMeta) {
     const world = makeWorld(c);
     const cells = world.island_snapshot();
     const size = world.island_size();
+    const space = world.is_space();
     world.free();
     const mod = await import('./viewer3d');
     if (token !== viewerToken) return; // closed while loading
-    viewer = mod.openIsland(el('viewer-stage'), { size, cells, space: world.is_space() });
+    viewer = mod.openIsland(el('viewer-stage'), { size, cells, space });
     viewer.setAutoRotate(autoRotate);
     msg.hidden = true;
   } catch (err) {
@@ -624,6 +628,11 @@ async function openBrief(l: LevelDef) {
   const go = el<HTMLButtonElement>('brief-go');
   go.textContent = meta?.status === 'playing' && meta.cleared > 0 ? '▶ Continue' : meta ? '↻ Play again' : 'Begin';
   go.onclick = () => void startLevel(l);
+  // testing: look at the island in 3D before playing
+  const b3d = el<HTMLButtonElement>('brief-3d');
+  b3d.hidden = !(VIEW_3D_ANY && l.mode === 'island');
+  b3d.onclick = () =>
+    void openViewer({ id: '', name: l.title, config: levelConfig(l), status: 'playing', elapsedMs: 0 } as unknown as WorldMeta);
   el('brief').hidden = false;
 }
 
@@ -675,7 +684,9 @@ function syncMenu() {
     b.setAttribute('aria-pressed', String(on));
   });
   const island = current?.config.mode === 'island';
-  el('m-3d').hidden = !(island && snapshot().status === 'won');
+  const can3d = island && (VIEW_3D_ANY || snapshot().status === 'won');
+  el('m-3d').hidden = !can3d;
+  el('pm-3d').hidden = !can3d;
 }
 
 function openPause() {
@@ -701,7 +712,8 @@ function bindGameMenu() {
     closePause();
     toggleProgressView();
   });
-  el('m-3d').addEventListener('click', () => {
+  for (const id of ['m-3d', 'pm-3d'])
+    el(id).addEventListener('click', () => {
     closePause();
     if (current) {
       const s = snapshot();
