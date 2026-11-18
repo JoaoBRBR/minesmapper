@@ -12,6 +12,7 @@ import { sound } from './sound';
 import { defaultForMap, playTrack, unlockTrack } from './music';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
+import { debugFrame, debugRender, isDebug, setDebugInfo } from './debug';
 import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -150,6 +151,15 @@ const animationsOn = () => settings.animations && !prefersReducedMotion();
 
 export function initGame(callbacks: GameCallbacks) {
   cb = callbacks;
+  setDebugInfo(() => {
+    if (!active || !world) return ['(no map open)'];
+    const c = '';
+    return [
+      `cam ${cam.cx.toFixed(1)}, ${cam.cy.toFixed(1)} · zoom ${cam.zoom.toFixed(1)}`,
+      `score ${world.score()} · hearts lost ${world.mistakes()}${level ? ` · ${level.id}` : ''}${c ? ` · ${c}` : ''}`,
+      `${world.is_island() ? 'island' : 'endless'}${world.is_space() ? ' · space' : ''}`,
+    ];
+  });
   document.addEventListener('visibilitychange', () => syncClock());
   window.addEventListener('resize', resize);
   resize();
@@ -427,7 +437,7 @@ function updateBanner(now: number) {
   if ($banner.hidden && !hide) bannerShownAt = now;
   $banner.hidden = hide;
   // 3D view: a reward for clearing an island.
-  $b3d.hidden = !(wd.is_island() && key === 'won');
+  $b3d.hidden = !(wd.is_island() && (key === 'won' || isDebug()));
   $bNext.hidden = !(level && key === 'won' && nextLevel(level));
   $bProgress.hidden = key !== 'lost';
 }
@@ -507,6 +517,7 @@ function updateHud(now: number) {
 
 function frame(now: number) {
   requestAnimationFrame(frame);
+  debugFrame(now);
   if (!active || !world) return;
   syncClock(now);
   stepKeyboard(now);
@@ -530,7 +541,7 @@ function frame(now: number) {
   if (dirty || ripple || endFx || denied || cleanFx.length) {
     dirty = false;
     clampCamera();
-    render(now);
+    debugRender(() => render(now));
   }
   updateHud(now);
 }

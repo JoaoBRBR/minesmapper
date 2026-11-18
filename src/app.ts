@@ -23,6 +23,7 @@ import {
 import { lang, setLang, tr } from './i18n';
 import { currentTrack, initMusic, nextTrack, onMusicChange, playMenuMusic, playlist, previousTrack, toggleRepeat, unlockTrack } from './music';
 import { SECRET_TRACK, TRACKS } from './tracks';
+import { initDebug, isDebug, onDebugChange } from './debug';
 import { LEVELS, getLevel, isSpaceUnlocked, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
@@ -201,7 +202,7 @@ function describe(m: WorldMeta) {
 
 /** Only islands you have cleared can be viewed in 3D. */
 function canView3D(m: WorldMeta) {
-  return m.config.mode === 'island' && m.status === 'won';
+  return m.config.mode === 'island' && (m.status === 'won' || isDebug());
 }
 
 function worldCard(m: WorldMeta) {
@@ -580,7 +581,7 @@ async function renderAdventure() {
   const thumbs: [HTMLCanvasElement, LevelDef][] = [];
   el('levels').replaceChildren(
     ...LEVELS.map((l, i) => {
-      const open = isUnlocked(progress, i);
+      const open = isDebug() || isUnlocked(progress, i);
       const res = progress[l.id];
       const meta = metas.find((m) => m.id === levelWorldId(l));
       const status = !open
@@ -681,7 +682,7 @@ function syncMenu() {
     b.setAttribute('aria-pressed', String(on));
   });
   const island = current?.config.mode === 'island';
-  const can3d = island && snapshot().status === 'won';
+  const can3d = island && (snapshot().status === 'won' || isDebug());
   el('m-3d').hidden = !can3d;
   el('pm-3d').hidden = !can3d;
 }
@@ -881,7 +882,7 @@ function drawPreview() {
 
 async function openCreator() {
   const n = (await listWorlds()).length + 1;
-  spaceUnlocked = isSpaceUnlocked(await loadProgress());
+  spaceUnlocked = isDebug() || isSpaceUnlocked(await loadProgress());
   realmSeg.set('overworld');
   modeSeg.set('island');
   $size.value = String(SIZE_STEPS.findIndex((s) => s.size === ISLAND_SIZES.medium));
@@ -1136,6 +1137,13 @@ export async function start() {
     },
   });
   bindCreator();
+  initDebug(toast);
+  // screens built from saved progress are redrawn when the switch flips
+  onDebugChange(() => {
+    if (screen === 'adventure') void renderAdventure();
+    else if (screen === 'worlds') void renderHome();
+    else if (screen === 'game') syncMenu();
+  });
   bindSettings();
   bindGameMenu();
   bindViewer();

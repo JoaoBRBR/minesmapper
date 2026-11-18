@@ -1990,3 +1990,19 @@ button.small {
   .tut *, .tut-hearts *, .tut-stars *, .tut-lose { animation: none !important; }
   .tut-flagimg, .tut-stars .full { opacity: 1 !important; }
 }
+
+/* ---- Debug mode (hidden switch) ---- */
+#debug-panel {
+  position: fixed;
+  left: 8px;
+  top: 64px;
+  z-index: 60;
+  margin: 0;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #7dff9a;
+  font: 11px/1.35 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  pointer-events: none;
+  white-space: pre;
+}
