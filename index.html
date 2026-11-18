@@ -65,6 +65,20 @@
       </div>
     </div>
 
+    <!-- First time on level 1: a short animated walkthrough -->
+    <div id="tutorial" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="tut-title"></div>
+        <div id="tut-stage" class="tip-stage" aria-hidden="true"></div>
+        <p id="tut-text"></p>
+        <div id="tut-dots" class="tut-dots" aria-hidden="true"></div>
+        <div class="row">
+          <button id="tut-skip">Skip</button>
+          <button id="tut-next" class="primary">Next</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" role="status" hidden></div>
 
     <!-- Progress view: a simplified map of what you have found -->
@@ -260,6 +274,9 @@
           <input type="checkbox" id="s-chunks" data-setting="chunkBorders" />
           <small>Outlines the 16×16 cleanup chunks and marks finished ones. Handy for testing.</small>
         </label>
+        <div class="adv-title">Data</div>
+        <small class="data-note">Deletes every world, trophy, record and setting on this device.</small>
+        <button id="s-clear" class="danger small data-btn">Clear all data</button>
         <div class="stack"><button id="s-close" class="primary">Done</button></div>
       </div>
     </div>
@@ -267,6 +284,7 @@
     <!-- Main menu -->
     <main id="home-screen" class="screen" hidden>
       <div id="home-float" role="toolbar" aria-label="Quick settings">
+        <button id="h-lang" class="float-btn lang-btn" aria-label="Language" title="Language"></button>
         <button id="h-music" class="float-btn" data-quick="music" aria-label="Music" title="Music"></button>
         <button id="h-audio" class="float-btn" data-quick="sound" aria-label="Sound" title="Sound effects"></button>
         <button id="h-vibration" class="float-btn" data-quick="vibration" aria-label="Vibration" title="Vibration"></button>

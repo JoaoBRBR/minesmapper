@@ -203,6 +203,8 @@ const paletteIndex = (biome: number, shade: number) => biome * SHADE_LEVELS + (s
 
 const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12', '#0e7490', '#111827', '#525252'];
 const INK = '#2a1b0e';
+/** Negative numbers are purple in every number style. */
+const NEG_PURPLE = '#8b2fd6';
 const HAND_FONT = 'Kalam, "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
 const ENGRAVED_FONT = 'Cinzel, "Trajan Pro", Palatino, Georgia, serif';
 
@@ -368,25 +370,19 @@ export function draw(
           const zero = spaceMode && (data[k + 2] & 4) !== 0;
           const text = neg ? `\u2212${n}` : String(n);
           if ((n > 0 || zero) && zoom >= 12) {
-            if (neg) {
-              ctx.lineWidth = Math.max(2, zoom * 0.16);
-              ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-              ctx.strokeText(text, mx, my + zoom * 0.04);
-              ctx.fillStyle = '#8b2fd6';
-              ctx.fillText(text, mx, my + zoom * 0.04);
-            } else if (numberStyle === 'colored') {
+            if (numberStyle === 'colored') {
               ctx.lineWidth = Math.max(2, zoom * 0.14);
               ctx.strokeStyle = 'rgba(255,255,255,0.85)';
               ctx.strokeText(text, mx, my + zoom * 0.04);
-              ctx.fillStyle = NUMBER_COLORS[n] || '#374151';
+              ctx.fillStyle = neg ? NEG_PURPLE : NUMBER_COLORS[n] || '#374151';
               ctx.fillText(text, mx, my + zoom * 0.04);
             } else if (numberStyle === 'engraved') {
               // Engraved into the ground: the cell's own colour, darker, with a pale lip along the
               // lower edge, perfectly upright like a stamped map.
               const pi = paletteIndex(data[k + 1], data[k + 2]);
-              ctx.fillStyle = ENGRAVE_LIGHT[pi];
+              ctx.fillStyle = neg ? '#e6cdfb' : ENGRAVE_LIGHT[pi];
               ctx.fillText(text, mx + zoom * 0.03, my + zoom * 0.055);
-              ctx.fillStyle = ENGRAVE_DARK[pi];
+              ctx.fillStyle = neg ? '#5b1c99' : ENGRAVE_DARK[pi];
               ctx.fillText(text, mx, my + zoom * 0.02);
             } else {
               // Written by hand: a touch of tilt and wobble that is stable per cell.
@@ -399,7 +395,7 @@ export function draw(
               ctx.lineWidth = Math.max(1.5, zoom * 0.1);
               ctx.strokeStyle = 'rgba(247, 238, 212, 0.7)';
               ctx.strokeText(text, 0, 0);
-              ctx.fillStyle = INK;
+              ctx.fillStyle = neg ? NEG_PURPLE : INK;
               ctx.fillText(text, 0, 0);
               ctx.restore();
             }

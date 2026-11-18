@@ -1787,3 +1787,206 @@ button.small {
   height: 34px;
   vertical-align: 0;
 }
+
+.lang-btn {
+  font: 700 14px var(--serif);
+  color: var(--ink);
+}
+.data-note {
+  display: block;
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.data-btn {
+  width: 100%;
+}
+
+/* ---- First-level tutorial ---- */
+#tutorial {
+  z-index: 26;
+}
+#tutorial .dialog {
+  width: min(92vw, 340px);
+}
+#tutorial p {
+  margin: 10px 0 8px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.tut-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.tut-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--edge-soft);
+}
+.tut-dots i.on {
+  background: var(--accent);
+}
+#tutorial .row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.tip-grid.tut {
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(3, 52px);
+}
+.tut .tc {
+  position: relative;
+}
+/* step 1: a tap opens the middle square and the ground around it follows */
+.tut-open .tut-c {
+  animation: tut-open 4s ease-in-out infinite;
+}
+.tut-open .tut-n {
+  animation: tut-open 4s ease-in-out infinite 0.25s;
+}
+@keyframes tut-open {
+  0%, 38% { background: linear-gradient(#d8c79a, #c2ad77); }
+  46%, 92% { background: #efe6c6; }
+  100% { background: linear-gradient(#d8c79a, #c2ad77); }
+}
+.tut-tool {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  left: calc(6px + 55px + 4px);
+  top: calc(6px + 55px + 4px);
+}
+.tut-tap {
+  animation: tut-tap 4s ease-in-out infinite;
+}
+@keyframes tut-tap {
+  0% { transform: translate(60px, 50px); opacity: 0; }
+  14% { opacity: 1; }
+  34% { transform: translate(6px, -6px) scale(1); }
+  40% { transform: translate(6px, -6px) scale(1.25); }
+  48%, 82% { transform: translate(6px, -6px) scale(1); opacity: 1; }
+  100% { transform: translate(60px, 50px); opacity: 0; }
+}
+/* step 2: the number and the two mines it counts */
+.tut-num .tut-open-now {
+  background: #efe6c6;
+}
+.tut-digit {
+  position: absolute;
+  left: calc(6px + 55px);
+  top: calc(6px + 55px);
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  font: 700 30px var(--serif);
+  color: #15803d;
+}
+.tut-mine {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  animation: tut-pulse 1.6s ease-in-out infinite;
+}
+.tut-mine.m1 { left: calc(6px + 7px); top: calc(6px + 7px); }
+.tut-mine.m2 { left: calc(6px + 110px + 7px); top: calc(6px + 55px + 7px); animation-delay: 0.4s; }
+@keyframes tut-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.55; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+/* step 3: press and hold, then a flag */
+.tut-ring {
+  position: absolute;
+  left: calc(6px + 55px + 6px);
+  top: calc(6px + 55px + 6px);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid #e8b02a;
+  animation: tut-ring 3.4s ease-in-out infinite;
+}
+@keyframes tut-ring {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { opacity: 1; }
+  55% { transform: scale(1); opacity: 1; }
+  62%, 100% { transform: scale(1.3); opacity: 0; }
+}
+.tut-flagimg {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  left: calc(6px + 55px + 1px);
+  top: calc(6px + 55px + 1px);
+  animation: tip-result 3.4s ease-in-out infinite;
+}
+/* step 4: hearts */
+.tut-hearts {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.tut-hearts img,
+.tut-lose img {
+  width: 54px;
+  height: 54px;
+}
+.tut-lose {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  animation: tut-hit 3.4s ease-in-out infinite;
+}
+.tut-lose img {
+  position: absolute;
+  inset: 0;
+}
+.tut-lose .full {
+  animation: tut-fade-out 3.4s ease-in-out infinite;
+}
+@keyframes tut-fade-out {
+  0%, 45% { opacity: 1; }
+  55%, 92% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes tut-hit {
+  0%, 44% { transform: none; }
+  48% { transform: translateX(-5px) rotate(-6deg); }
+  52% { transform: translateX(5px) rotate(6deg); }
+  56%, 100% { transform: none; }
+}
+/* step 5: three stars light up in turn */
+.tut-stars {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.tut-stars span {
+  position: relative;
+  width: 62px;
+  height: 62px;
+}
+.tut-stars img {
+  position: absolute;
+  inset: 0;
+  width: 62px;
+  height: 62px;
+}
+.tut-stars .full {
+  opacity: 0;
+  animation: tut-star 3.6s ease-in-out infinite;
+}
+.tut-stars .full.s1 { animation-delay: 0.45s; }
+.tut-stars .full.s2 { animation-delay: 0.9s; }
+@keyframes tut-star {
+  0%, 10% { opacity: 0; transform: scale(0.3); }
+  22%, 85% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tut *, .tut-hearts *, .tut-stars *, .tut-lose { animation: none !important; }
+  .tut-flagimg, .tut-stars .full { opacity: 1 !important; }
+}

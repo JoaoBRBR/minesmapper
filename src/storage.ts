@@ -235,3 +235,28 @@ export async function deleteTrophy(id: string): Promise<void> {
 export function requestPersistence() {
   navigator.storage?.persist?.().catch(() => {});
 }
+
+/** Erases everything this game keeps on the device: worlds, trophies, records and settings. */
+export async function clearAllData(): Promise<void> {
+  const db = await openDb();
+  db?.close();
+  dbPromise = null;
+  memWorlds.clear();
+  memStates.clear();
+  memKV.clear();
+  memTrophies.clear();
+  await new Promise<void>((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(DB_NAME);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch {
+    /* nothing to clear */
+  }
+}

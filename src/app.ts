@@ -4,7 +4,7 @@ import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Settings } from './settings';
 import { sound } from './sound';
-import { bump, dailyStreak, flushStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
+import { bump, dailyStreak, flushStats, freezeStats, loadStats, resetStats, startPlay, stats, stopPlay } from './stats';
 import { draw } from './render';
 import { DIFFICULTIES, ISLAND_SIZES, levelConfig, SIZE_STEPS, WORLD_GEN, dailyConfig, makeWorld, randomSeed, seedFromText, todayKey } from './config';
 import {
@@ -20,12 +20,14 @@ import {
   snapshot,
   thumbnail,
 } from './game';
+import { lang, setLang, tr } from './i18n';
 import { currentTrack, initMusic, nextTrack, onMusicChange, playMenuMusic, playlist, previousTrack, toggleRepeat, unlockTrack } from './music';
 import { SECRET_TRACK, TRACKS } from './tracks';
 import { LEVELS, getLevel, isSpaceUnlocked, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
+  clearAllData,
   deleteTrophy,
   deleteWorld,
   getState,
@@ -87,8 +89,11 @@ function scheduleSave() {
 }
 
 /** Writes the open world to IndexedDB (serialised so saves never interleave). */
+let wiping = false;
+
 function saveCurrent(withThumb = false): Promise<void> {
   clearTimeout(saveTimer);
+  if (wiping) return saveChain;
   if (!current || screen !== 'game') return saveChain;
   const s = snapshot();
   // finished islands become trophies; adventure levels do not, except the space ones (meteors)
@@ -155,14 +160,14 @@ async function restartWorld(id: string) {
 
 function confirmRestart(meta: { name: string; status: string; cleared: number }) {
   if (meta.status !== 'playing' || meta.cleared === 0) return true;
-  return confirm(`Restart "${meta.name}"? Your progress on this world will be lost.`);
+  return confirm(tr(`Restart "${meta.name}"? Your progress on this world will be lost.`));
 }
 
 // --- Home -------------------------------------------------------------------------------
 
 function ago(ts: number) {
   const s = Math.round((Date.now() - ts) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
   if (s < 60) return 'just now';
   if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute');
   if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour');
@@ -228,7 +233,7 @@ function worldCard(m: WorldMeta) {
     ariaLabel: `Delete ${m.name}`,
     onclick: async () => {
       const keeps = m.config.mode === 'island' && m.status === 'won';
-      if (!confirm(`Delete "${m.name}" forever?${keeps ? '\n\nIts trophy stays in Finished islands.' : ''}`)) return;
+      if (!confirm(tr(`Delete "${m.name}" forever?${keeps ? '\n\nIts trophy stays in Finished islands.' : ''}`))) return;
       await deleteWorld(m.id);
       if (current?.id === m.id) current = null;
       await renderHome();
@@ -397,7 +402,7 @@ async function openTrophies() {
               title: 'Remove this trophy',
               ariaLabel: `Remove the trophy ${t.name}`,
               onclick: async () => {
-                if (!confirm(`Remove "${t.name}" from your Finished islands?`)) return;
+                if (!confirm(tr(`Remove "${t.name}" from your Finished islands?`))) return;
                 await deleteTrophy(t.id);
                 await openTrophies();
               },
@@ -1125,6 +1130,7 @@ export async function start() {
   initGame({
     onChange: scheduleSave,
     onMenu: openPause,
+    onHome: () => void goHome(),
     onRestart: () => void restartCurrent(),
     onNextLevel: (l) => {
       const next = nextLevel(l);
@@ -1147,6 +1153,19 @@ export async function start() {
   el('update-dismiss').addEventListener('click', () => ($update.hidden = true));
   registerServiceWorker(() => ($update.hidden = false));
 
+  const $lang = el('h-lang');
+  $lang.textContent = lang.toUpperCase();
+  $lang.addEventListener('click', () => setLang(lang === 'en' ? 'pt' : 'en'));
+  el('s-clear').addEventListener('click', async () => {
+    if (!confirm(tr('Clear all data? Every world, trophy, record, setting and your Adventure progress will be deleted from this device.'))) return;
+    if (!confirm(tr('This cannot be undone. Are you absolutely sure you want to erase everything and start from scratch?'))) return;
+    wiping = true;
+    freezeStats();
+    stopPlay();
+    await saveChain.catch(() => undefined);
+    await clearAllData();
+    location.reload();
+  });
   el('h-new').addEventListener('click', () => void openCreator());
   el('w-new').addEventListener('click', () => void openCreator());
   el('h-worlds').addEventListener('click', () => show('worlds'));
@@ -1160,7 +1179,7 @@ export async function start() {
   el('h-stats').addEventListener('click', () => void openStats());
   el('stats-back').addEventListener('click', () => void goHome());
   el('stats-reset').addEventListener('click', async () => {
-    if (!confirm('Reset all lifetime stats and records? Your saved worlds are not affected.')) return;
+    if (!confirm(tr('Reset all lifetime stats and records? Your saved worlds are not affected.'))) return;
     await resetStats();
     await renderStats();
   });

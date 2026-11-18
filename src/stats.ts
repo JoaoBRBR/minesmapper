@@ -71,8 +71,16 @@ function changed() {
   timer = window.setTimeout(() => void flushStats(), 1000);
 }
 
+/** After "clear all data" nothing more may be written before the page reloads. */
+let frozen = false;
+export const freezeStats = () => {
+  frozen = true;
+  clearTimeout(timer);
+};
+
 export function flushStats(): Promise<void> {
   clearTimeout(timer);
+  if (frozen) return Promise.resolve();
   return setKV(KEY, stats).catch((err) => console.error('Saving stats failed', err));
 }
 

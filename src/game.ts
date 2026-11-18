@@ -3,8 +3,10 @@ import { setBackgroundRealm } from './background';
 import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
+import { tr } from './i18n';
 import { SECRET_TRACK } from './tracks';
 import { maybeShowTip } from './tips';
+import { maybeShowTutorial } from './tutorial';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
 import { defaultForMap, playTrack, unlockTrack } from './music';
@@ -17,6 +19,8 @@ export interface GameCallbacks {
   /** The player did something worth saving. */
   onChange(): void;
   onMenu(): void;
+  /** The player wants the main menu (end-of-game dialog). */
+  onHome(): void;
   onRestart(): void;
   /** The player wants to see the island in 3D (win dialog button). */
   onView3D(): void;
@@ -200,6 +204,8 @@ export function loadWorld(
   if (level && opening && !saved && !(state && world.score() > 0) && level.goal.type === 'reach' && animationsOn()) {
     playIntro(level, opening);
   }
+  // the very first level: a short walkthrough, once
+  if (level?.id === 'first-landfall' && world.score() === 0) maybeShowTutorial();
   clampCamera();
   invalidate();
 }
@@ -555,7 +561,7 @@ function drawLevelMarks(l: LevelDef) {
     ctx.fillStyle = 'rgba(217,165,32,0.10)';
     if (fresh) ctx.fillRect(x0, y0, side, side);
     glowRect(x0, y0, side, side, false);
-    if (fresh) label('Clear this area', x0 + side / 2, y0 - 10);
+    if (fresh) label(tr('Clear this area'), x0 + side / 2, y0 - 10);
   } else if (g.type === 'reach') {
     if (start && fresh) {
       const [x0, y0] = toScreen(start[0], start[1]);
@@ -564,7 +570,7 @@ function drawLevelMarks(l: LevelDef) {
       ctx.fillStyle = 'rgba(217,165,32,0.10)';
       ctx.fillRect(x0, y0, sw, sh);
       glowRect(x0, y0, sw, sh, true);
-      label('Start here', x0 + sw / 2, y0 - 10);
+      label(tr('Start here'), x0 + sw / 2, y0 - 10);
     }
     drawTreasureTrail(start, g.target);
     drawTreasureX(g.target[0], g.target[1]);
@@ -1277,7 +1283,7 @@ const settled = (fn: () => void) => () => {
 };
 $bNext.addEventListener('click', settled(() => level && cb.onNextLevel(level)));
 el('b-restart').addEventListener('click', settled(() => cb.onRestart()));
-el('b-menu').addEventListener('click', settled(() => cb.onMenu()));
+el('b-menu').addEventListener('click', settled(() => cb.onHome()));
 $b3d.addEventListener('click', settled(() => cb.onView3D()));
 $bProgress.addEventListener(
   'click',

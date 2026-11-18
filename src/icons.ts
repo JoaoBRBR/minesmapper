@@ -1,3 +1,5 @@
+import { tr } from './i18n';
+
 // All pictures come from the SVG files in art/. Map glyphs are rasterised to small canvases (cached per size
 // step, so each stamp on the map is a cheap 1:1 copy); interface icons replace emoji and symbols in text.
 
@@ -77,8 +79,12 @@ function makeIcon(token: string): HTMLImageElement | null {
 }
 
 function iconizeText(node: Text) {
-  const text = node.data;
-  if (!PATTERN.test(text)) return;
+  const original = node.data;
+  const text = tr(original);
+  if (!PATTERN.test(text)) {
+    if (text !== original) node.data = text;
+    return;
+  }
   const frag = document.createDocumentFragment();
   let last = 0;
   let made = 0;
@@ -91,9 +97,24 @@ function iconizeText(node: Text) {
   }
   if (last < text.length) frag.append(text.slice(last));
   if (made) node.replaceWith(frag); // never swap a node for an identical one, or the observer would loop
+  else if (text !== original) node.data = text;
 }
 
 const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION']);
+
+const ATTRS = ['title', 'aria-label', 'placeholder'];
+function translateAttributes(root: Element) {
+  const all = [root, ...root.querySelectorAll('[title],[aria-label],[placeholder]')];
+  for (const e of all) {
+    for (const a of ATTRS) {
+      const v = e.getAttribute(a);
+      if (v) {
+        const t = tr(v);
+        if (t !== v) e.setAttribute(a, t);
+      }
+    }
+  }
+}
 
 function iconize(root: Node) {
   if (root.nodeType === Node.TEXT_NODE) {
@@ -101,6 +122,7 @@ function iconize(root: Node) {
     return;
   }
   if (root.nodeType !== Node.ELEMENT_NODE || SKIP.has((root as Element).tagName)) return;
+  translateAttributes(root as Element);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const found: Text[] = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
