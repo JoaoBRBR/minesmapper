@@ -55,7 +55,6 @@ const $recenter = el<HTMLButtonElement>('recenter');
 const $vignette = el('vignette');
 const $score = el('score');
 const $timer = el('timer');
-const $pos = el('pos');
 const $mode = el<HTMLButtonElement>('mode');
 const $home = el<HTMLButtonElement>('home');
 const $menu = el<HTMLButtonElement>('menu');
@@ -447,6 +446,7 @@ function updateHud(now: number) {
   // far from the start (two cleanup chunks or more): offer a way back
   const far = Math.hypot(cam.cx - HOME.x, cam.cy - HOME.y) > 32 && !progressView;
   if ($recenter.hidden === far) $recenter.hidden = !far;
+  if ($home.hidden === far) $home.hidden = !far;
   const island = wd.is_island();
   const finished = wd.is_game_over() || wd.is_won();
   if (startedAt === null && wd.score() > 0) startedAt = now;
@@ -471,9 +471,7 @@ function updateHud(now: number) {
     const left = wd.mines_total() - wd.flag_count();
     setText(
       $score,
-      compactHud.matches
-        ? `🏝 ${pct}% · 💣 ${left}${wd.is_won() ? ' ✓' : wd.is_game_over() ? ' ✕' : ''}`
-        : `🏝 ${wd.score()} / ${total} (${pct}%) · 💣 ${left}${tail}`,
+      `🏝 ${pct}% · 💣 ${left}${wd.is_won() ? ' ✓' : wd.is_game_over() ? ' ✕' : ''}`,
     );
     setText($timer, startedAt === null ? '00:00' : fmtTime((endedAt ?? clockNow(now)) - startedAt));
   } else {
@@ -510,8 +508,6 @@ function updateHud(now: number) {
   // the floating Reveal/Flag button (phones)
   $fab.hidden = progressView || !settings.modeSwitch;
   syncMarkUi();
-  const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
-  setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
   updateBanner(now);
 }
 

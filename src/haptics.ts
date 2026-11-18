@@ -1,7 +1,8 @@
 import { settings } from './settings';
 
-/** True where the Vibration API exists (Android browsers; not iPhone Safari). */
-export const vibrationSupported = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+/** True on touch devices that have the Vibration API (Android browsers; not iPhone Safari, not computers). */
+export const vibrationSupported =
+  typeof navigator !== 'undefined' && 'vibrate' in navigator && (navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches); // not on a plain computer
 
 function buzz(pattern: number | number[]) {
   if (settings.vibration && vibrationSupported) navigator.vibrate(pattern);

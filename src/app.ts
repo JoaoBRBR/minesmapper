@@ -10,13 +10,9 @@ import { DIFFICULTIES, ISLAND_SIZES, levelConfig, SIZE_STEPS, WORLD_GEN, dailyCo
 import {
   fmtTime,
   initGame,
-  getMarkMode,
   toast,
-  toggleProgressView,
   loadWorld,
-  recenterView,
   setActive,
-  setMarkMode,
   snapshot,
   thumbnail,
 } from './game';
@@ -672,15 +668,6 @@ async function startLevel(l: LevelDef) {
 /** Fills the menu with the current state each time it opens. */
 function syncMenu() {
   el('pause-name').textContent = current?.name ?? '';
-  el('menu-pos').textContent = el('pos').textContent ?? '';
-  const mode = getMarkMode();
-  const space = current?.config.space === true;
-  document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) => {
-    if (b.dataset.v === 'neg') b.hidden = !space;
-    const on = b.dataset.v === mode;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
   const island = current?.config.mode === 'island';
   const can3d = island && (snapshot().status === 'won' || isDebug());
   el('m-3d').hidden = !can3d;
@@ -696,20 +683,6 @@ function openPause() {
 const closePause = () => ($pause.hidden = true);
 
 function bindGameMenu() {
-  document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) =>
-    b.addEventListener('click', () => {
-      setMarkMode(b.dataset.v as 'reveal' | 'flag' | 'neg');
-      closePause();
-    }),
-  );
-  el('m-center').addEventListener('click', () => {
-    recenterView();
-    closePause();
-  });
-  el('m-progress').addEventListener('click', () => {
-    closePause();
-    toggleProgressView();
-  });
   for (const id of ['m-3d', 'pm-3d'])
     el(id).addEventListener('click', () => {
     closePause();
@@ -1008,6 +981,8 @@ function bindSettings() {
   onSettingsChange(syncRanges);
   for (const r of ranges) r.addEventListener('input', () => setSetting('musicVolume', Number(r.value) / 100));
   if (!vibrationSupported) {
+    // no vibration motor (a computer, iPhone Safari): hide every vibration control
+    for (const id of ['s-vibration-row', 'm-vibration-row']) el(id).hidden = true;
     for (const i of inputs.filter((x) => x.dataset.setting === 'vibration')) {
       i.disabled = true;
       i.closest('.switch')?.classList.add('disabled');

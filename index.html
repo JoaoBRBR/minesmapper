@@ -29,8 +29,7 @@
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
-      <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
-      <span class="chip hud-extra" id="pos">0, 0</span>
+      <button id="home" class="hud-extra" hidden title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
         <span class="ico">☰</span><span class="lbl"> Menu</span>
       </button>
@@ -115,14 +114,6 @@
           <b id="pause-name"></b>
           <button id="p-resume" aria-label="Close menu">✕</button>
         </div>
-        <div class="menu-info desk-only" id="menu-pos"></div>
-        <div class="seg desk-only" id="m-mode">
-          <button type="button" data-v="reveal">⛏ Reveal</button>
-          <button type="button" data-v="flag">🚩 Flag</button>
-          <button type="button" data-v="neg" hidden>🏴 Negative</button>
-        </div>
-        <button id="m-center" class="desk-only">⌖ Center on the start</button>
-        <button id="m-progress" class="desk-only">📊 View progress</button>
         <button id="m-3d" class="desk-only" hidden>🌍 View the island in 3D</button>
         <div class="touch-menu mobile-only">
           <div class="quick-row">
@@ -159,7 +150,7 @@
           <b>Sound effects</b>
           <input type="checkbox" id="m-sound" data-setting="sound" />
         </label>
-        <label class="switch">
+        <label class="switch" id="m-vibration-row">
           <b>Vibration</b>
           <input type="checkbox" id="m-vibration" data-setting="vibration" />
         </label>
@@ -185,10 +176,9 @@
           <b>Numbers</b>
           <div class="seg" data-setting-choice="numberStyle" id="s-numberStyle">
             <button type="button" data-v="engraved">Engraved</button>
-            <button type="button" data-v="handwritten">Written</button>
             <button type="button" data-v="colored">Colored</button>
           </div>
-          <small>Engraved like a printed map, hand-written, or the classic colours.</small>
+          <small>Engraved like a printed map, or the classic colours.</small>
         </div>
         <label class="switch">
           <b>Show chunk borders</b>
@@ -260,7 +250,6 @@
           <b>Numbers</b>
           <div class="seg" data-setting-choice="numberStyle" id="m-numberStyle">
             <button type="button" data-v="engraved">Engraved</button>
-            <button type="button" data-v="handwritten">Written</button>
             <button type="button" data-v="colored">Colored</button>
           </div>
         </div>

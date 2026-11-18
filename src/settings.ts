@@ -1,7 +1,7 @@
 // Per-device preferences, kept in localStorage (a convenience, not game state).
 
-export type NumberStyle = 'engraved' | 'handwritten' | 'colored';
-const NUMBER_STYLES: NumberStyle[] = ['engraved', 'handwritten', 'colored'];
+export type NumberStyle = 'engraved' | 'colored';
+const NUMBER_STYLES: NumberStyle[] = ['engraved', 'colored'];
 
 export interface Settings {
   animations: boolean;

@@ -205,7 +205,6 @@ const NUMBER_COLORS = ['', '#1d4ed8', '#15803d', '#b91c1c', '#4c1d95', '#7c2d12'
 const INK = '#2a1b0e';
 /** Negative numbers are purple in every number style. */
 const NEG_PURPLE = '#8b2fd6';
-const HAND_FONT = 'Kalam, "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
 const ENGRAVED_FONT = 'Cinzel, "Trajan Pro", Palatino, Georgia, serif';
 
 /** Cell reveal ripple (parallel arrays; `t0` is the start time of each cell's pop, in ms). */
@@ -336,9 +335,7 @@ export function draw(
     ctx.font =
       numberStyle === 'colored'
         ? `700 ${Math.round(zoom * 0.62)}px system-ui, sans-serif`
-        : numberStyle === 'handwritten'
-          ? `700 ${Math.round(zoom * 0.7)}px ${HAND_FONT}`
-          : `700 ${Math.round(zoom * 0.6)}px ${ENGRAVED_FONT}`;
+        : `700 ${Math.round(zoom * 0.6)}px ${ENGRAVED_FONT}`;
     ctx.lineJoin = 'round';
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
