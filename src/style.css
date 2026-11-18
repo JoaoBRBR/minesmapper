@@ -2037,3 +2037,19 @@ textarea,
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* controls for testing: only while debug mode is on */
+body:not(.debug) .debug-only {
+  display: none !important;
+}
+/* names, seeds and credits can be copied */
+#credits,
+#credits *,
+.card .name,
+.card .meta,
+#c-stats,
+#c-seed-hint,
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
