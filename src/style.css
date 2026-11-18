@@ -186,6 +186,7 @@ button.danger {
 
 #menu {
   position: relative;
+  margin-left: auto; /* always at the far right */
 }
 
 #menu .dot {
