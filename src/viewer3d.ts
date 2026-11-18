@@ -40,15 +40,51 @@ export interface Viewer {
 const SEA = 107 / 255; // matches crate/src/terrain.rs (0.42)
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
+/** Box blur over the cells where `use(i)` is true only (so a coast is not dragged into the sea). */
+function blurWhere(src: Float32Array, n: number, use: (i: number) => boolean, r: number, passes = 1) {
+  let cur = src;
+  for (let p = 0; p < passes; p++) {
+    for (const horizontal of [true, false]) {
+      const out = new Float32Array(cur.length);
+      for (let iz = 0; iz < n; iz++) {
+        for (let ix = 0; ix < n; ix++) {
+          let sum = 0;
+          let k = 0;
+          for (let d = -r; d <= r; d++) {
+            const [x, z] = horizontal ? [ix + d, iz] : [ix, iz + d];
+            if (x < 0 || z < 0 || x >= n || z >= n || !use(z * n + x)) continue;
+            sum += cur[z * n + x];
+            k++;
+          }
+          out[iz * n + ix] = k ? sum / k : cur[iz * n + ix];
+        }
+      }
+      cur = out;
+    }
+  }
+  return cur;
+}
+
+/** How tall each biome stands (0..1 of the tallest peak): shores low, forests middling, rock and snow high. */
+const BIOME_HEIGHT = [0, 0, 0.04, 0.16, 0.34, 0.16, 0.2, 0.3, 0.32, 0.06, 0.42, 0.46, 0.72, 1];
+
 export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
   if (data.space) return openMeteor(stage, data);
   const { size: n, cells } = data;
-  const heightScale = n * 0.22; // how tall the highest peaks stand
+  const heightScale = 8 + n * 0.07; // how tall the highest peaks stand (calm on big islands too)
   const depthScale = n * 0.3; // how deep the sea floor sinks
   const seaDepth = SEA * depthScale; // the sea block reaches the deepest floor
   const floorY = -seaDepth - n * 0.03;
 
   // --- terrain ---------------------------------------------------------------------------------
+  const isLand = (i: number) => cells[i * 2 + 1] / 255 >= SEA;
+  // height follows the biome (shore low, hills and rock high), softened, with a little of the real elevation
+  const base = new Float32Array(n * n);
+  for (let i = 0; i < n * n; i++) {
+    const e = (cells[i * 2 + 1] / 255 - SEA) / (1 - SEA);
+    base[i] = isLand(i) ? 0.75 * (BIOME_HEIGHT[cells[i * 2]] ?? 0.3) + 0.25 * Math.max(0, e) : 0;
+  }
+  const level = blurWhere(base, n, isLand, 2, 2);
   const positions = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
   const half = (n - 1) / 2;
@@ -58,7 +94,7 @@ export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
       const biome = cells[i * 2];
       const e = cells[i * 2 + 1] / 255;
       const land = e >= SEA;
-      const y = land ? ((e - SEA) / (1 - SEA)) * heightScale : (e - SEA) * depthScale;
+      const y = land ? Math.max(0.15, level[i]) * heightScale : (e - SEA) * depthScale;
       positions.set([ix - half, y, iz - half], i * 3);
 
       let r: number;
@@ -67,7 +103,7 @@ export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
       if (land) {
         const c = BIOME_COLORS[biome] ?? BIOME_COLORS[6];
         // a touch brighter with altitude
-        const f = 0.92 + 0.16 * ((e - SEA) / (1 - SEA));
+        const f = 0.92 + 0.16 * Math.min(1, level[i]);
         [r, g, b] = [Math.min(1, (c[0] / 255) * f), Math.min(1, (c[1] / 255) * f), Math.min(1, (c[2] / 255) * f)];
       } else {
         // sea floor: sand in the shallows, deep navy far from shore
@@ -250,6 +286,11 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   };
   const smooth = blur(blur(elev, true), false);
   const edgeSmooth = blur(blur(blur(blur(edge, true), false), true), false); // rounds off the stair-steps of the distance
+  // craters in 3D: raised rims, bowl floors, from the biome of each cell (then softened)
+  const CRATER_H: Record<number, number> = { 16: 1, 15: -1.1, 17: 0.3 };
+  const craterRaw = new Float32Array(count);
+  for (let i = 0; i < count; i++) craterRaw[i] = land(i) ? (CRATER_H[cells[i * 2]] ?? 0) : 0;
+  const craterRel = blurWhere(craterRaw, n, land, 1, 2);
   const top = new Float32Array(count);
   const colors = new Float32Array(count * 3);
   const reach = Math.max(4, half * 0.5);
@@ -257,8 +298,8 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   for (let i = 0; i < count; i++) if (land(i)) eMin = Math.min(eMin, edgeSmooth[i]);
   for (let i = 0; i < count; i++) {
     const t = Math.min(1, Math.max(0, edgeSmooth[i] - eMin) / reach); // 0 on the outermost rock, so top and underside meet
-    const lump = Math.sqrt(t); // rounded: steep at the rim, flat on top
-    const relief = land(i) ? (elev[i] - smooth[i]) * n * 0.7 : 0;
+    const lump = t * t * (3 - 2 * t); // eases off the rim: no steep stair-stepped cliff
+    const relief = land(i) ? craterRel[i] * n * 0.05 + (elev[i] - smooth[i]) * n * 0.15 : 0;
     top[i] = land(i) ? n * 0.1 * lump + relief : 0;
     const c = BIOME_COLORS[cells[i * 2]] ?? BIOME_COLORS[14];
     const f = 0.92 + Math.max(-0.2, Math.min(0.3, relief / (n * 0.1)));
@@ -315,14 +356,6 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   };
   const topIdx = new Map<number, number>();
   const T = (i: number) => topIdx.get(i) ?? (topIdx.set(i, vertex(i, top[i], 1)), topIdx.get(i)!);
-  for (let qz = 0; qz < n - 1; qz++) {
-    for (let qx = 0; qx < n - 1; qx++) {
-      if (!full(qx, qz)) continue;
-      const a = qz * n + qx;
-      const [b, c, d] = [a + 1, a + n, a + n + 1];
-      idx.push(T(a), T(c), T(b), T(b), T(c), T(d)); // top, facing up
-    }
-  }
   // The underside is a separate smooth dome (not the grid, whose staircase outline made teeth):
   // its edge follows the smoothed outline of the rock, and it bulges down like an egg.
   const sample = (wx: number, wz: number) => {
@@ -350,15 +383,18 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
     }
     R = next;
   }
+  // 0 at the edge, 1 at the middle: round, but not vertical at the rim (a vertical rim made a tall band)
+  const profile = (f: number) => Math.pow(Math.max(0, 1 - Math.pow(f, 2.2)), 0.8);
+  const RIM = 0.4; // the dome ends just outside the top surface, so the curtain between them is short
   const rings = 36;
   const depth = n * 0.42;
   const domeAt = (f: number, k: number) => {
     const a = (k / K) * Math.PI * 2;
-    const r = f * (R[k % K] + 1.3);
+    const r = f * (R[k % K] + RIM);
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
     const lumps = 1 + 0.1 * Math.sin(x * 0.33 + 1) * Math.sin(z * 0.29) + 0.06 * f * Math.sin(a * 3 + 0.7);
-    const y = -depth * Math.pow(Math.max(0, 1 - Math.pow(f, 2.4)), 1 / 2.4) * lumps;
+    const y = -depth * profile(f) * lumps;
     // tint from the nearest bit of rock, darker the deeper it goes
     const ci = Math.min(n - 1, Math.max(0, Math.round(x + half)));
     const cj = Math.min(n - 1, Math.max(0, Math.round(z + half)));
@@ -387,7 +423,27 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
     );
     return pos.length / 3 - 1;
   };
+  // height of the dome right under any point (used to sew the top's rim onto it)
+  const domeRadius = (a: number) => {
+    const k = ((a / (Math.PI * 2)) * K + K) % K;
+    const k0 = Math.floor(k) % K;
+    return mixN(R[k0], R[(k0 + 1) % K], k - Math.floor(k)) + RIM;
+  };
+  const mixN = (a: number, b: number, t: number) => a + (b - a) * t;
+  const domeY = (x: number, z: number) => {
+    const f = Math.min(1, Math.hypot(x, z) / domeRadius(Math.atan2(z, x)));
+    return -depth * profile(f);
+  };
   const tip = domeAt(0, 0);
+  for (let qz = 0; qz < n - 1; qz++) {
+    for (let qx = 0; qx < n - 1; qx++) {
+      if (!full(qx, qz)) continue;
+      const a = qz * n + qx;
+      const [b, c, d] = [a + 1, a + n, a + n + 1];
+      idx.push(T(a), T(c), T(b), T(b), T(c), T(d)); // top, facing up
+    }
+  }
+
   const ring: number[][] = [];
   for (let j = 1; j <= rings; j++) {
     const r: number[] = [];
@@ -399,6 +455,31 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
     for (let k = 0; k < K; k++) {
       const [a0, a1, b0, b1] = [ring[j][k], ring[j][(k + 1) % K], ring[j + 1][k], ring[j + 1][(k + 1) % K]];
       idx.push(a0, b0, a1, a1, b0, b1);
+    }
+  }
+  // a thin curtain from every edge of the top surface down onto the dome, so there is no gap
+  const baseIdx = new Map<number, number>();
+  const D = (i: number) => {
+    let v = baseIdx.get(i);
+    if (v === undefined) {
+      const x = (i % n) - half + offX[i];
+      const z = Math.floor(i / n) - half + offZ[i];
+      pos.push(x, domeY(x, z) - 0.35, z);
+      col.push(colors[i * 3] * 0.7, colors[i * 3 + 1] * 0.7, colors[i * 3 + 2] * 0.7);
+      v = pos.length / 3 - 1;
+      baseIdx.set(i, v);
+    }
+    return v;
+  };
+  const wall = (p: number, q: number) => idx.push(T(p), D(p), T(q), T(q), D(p), D(q));
+  for (let iz = 0; iz < n; iz++) {
+    for (let ix = 0; ix < n - 1; ix++) {
+      if (full(ix, iz - 1) !== full(ix, iz)) wall(iz * n + ix, iz * n + ix + 1);
+    }
+  }
+  for (let iz = 0; iz < n - 1; iz++) {
+    for (let ix = 0; ix < n; ix++) {
+      if (full(ix - 1, iz) !== full(ix, iz)) wall(iz * n + ix, (iz + 1) * n + ix);
     }
   }
   const rock = new BufferGeometry();
