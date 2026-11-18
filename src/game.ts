@@ -268,6 +268,9 @@ export function setActive(on: boolean) {
     $fab.hidden = true;
     $vignette.hidden = true;
     $recenter.hidden = true;
+    $oracle.hidden = true;
+    $iceBtn.hidden = true;
+    $flagKind.hidden = true;
   }
   if (!on) {
     $banner.hidden = true;
