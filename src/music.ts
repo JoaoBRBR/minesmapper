@@ -2,7 +2,6 @@
 // node so the volume slider also works on iPhone. Nothing is downloaded until a track is played.
 
 import { onSettingsChange, settings, setSetting } from './settings';
-import { SPACE_OPEN_FOR_TESTING } from './levels';
 import { MAP_TRACKS, MENU_TRACK, SECRET_TRACK, TRACKS, trackById, type Track } from './tracks';
 
 const files = import.meta.glob('../music/*.m4a', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -34,7 +33,7 @@ export const isUnlocked = (id: string) => unlocked.has(id);
 
 /** The tracks the player can step through (secret ones only after they are unlocked). */
 export function playlist(): Track[] {
-  return TRACKS.filter((t) => (!t.secret || unlocked.has(t.id) || SPACE_OPEN_FOR_TESTING) && urlOf(t.id));
+  return TRACKS.filter((t) => (!t.secret || unlocked.has(t.id)) && urlOf(t.id));
 }
 
 export function currentTrack(): Track | undefined {

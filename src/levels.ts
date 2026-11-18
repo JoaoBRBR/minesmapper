@@ -290,17 +290,9 @@ export async function recordResult(id: string, stars: number, ms: number): Promi
   return !old || stars > old.stars;
 }
 
-/** Testing switch: every level is open. Set to false before release. */
-const UNLOCK_ALL = true;
-
-/** Testing switch: lets the free-expedition screen offer Space before a space level is beaten. */
-export const SPACE_OPEN_FOR_TESTING = true;
-
 /** Space opens in the free-expedition screen once any space level has been beaten. */
-export const isSpaceUnlocked = (progress: AdventureProgress) =>
-  SPACE_OPEN_FOR_TESTING || LEVELS.some((l) => l.space && progress[l.id]);
+export const isSpaceUnlocked = (progress: AdventureProgress) => LEVELS.some((l) => l.space && progress[l.id]);
 
 /** A level opens once the one before it has been finished. */
 export const isUnlocked = (progress: AdventureProgress, index: number) =>
-  UNLOCK_ALL ||
   index === 0 || (progress[LEVELS[index - 1].id]?.stars ?? 0) > 0;
