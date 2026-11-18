@@ -8,7 +8,9 @@
       <stop offset="0" stop-color="#f6ecd2"/><stop offset="1" stop-color="#bda26b"/>
     </linearGradient>
   </defs>
-  <g transform="translate(420 0) scale(-1 1)">
+  <g transform="rotate(180 210 28)">
+    <!-- soft shadow under the roll -->
+    <ellipse cx="206" cy="47" rx="188" ry="5" fill="#000" opacity="0.18"/>
     <!-- tube body -->
     <path d="M30 14 Q20 28 30 42 L384 42 L384 14 Z" fill="url(#tube)" stroke="#8f7142" stroke-width="2" stroke-linejoin="round"/>
     <!-- fibre lines -->

@@ -9,6 +9,8 @@
     </linearGradient>
   </defs>
   <g >
+    <!-- soft shadow under the roll -->
+    <ellipse cx="206" cy="47" rx="188" ry="5" fill="#000" opacity="0.18"/>
     <!-- tube body -->
     <path d="M30 14 Q20 28 30 42 L384 42 L384 14 Z" fill="url(#tube)" stroke="#8f7142" stroke-width="2" stroke-linejoin="round"/>
     <!-- fibre lines -->
