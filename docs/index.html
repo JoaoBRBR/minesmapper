@@ -15,9 +15,9 @@
     />
     <meta name="theme-color" content="#e3d2a4" />
     <title>Mine's Mapper — a cartographer's minefield</title>
-    <script type="module" crossorigin src="./assets/index-Dyi897xv.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/render-C-9euVI7.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-CTTMTyhA.css">
+    <script type="module" crossorigin src="./assets/index-Cp0zXVOt.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/render-Bh3h91EG.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-BaprCxm4.css">
   </head>
   <body>
     <canvas id="bg" hidden aria-hidden="true"></canvas>
@@ -28,22 +28,59 @@
 
     <div id="hud" hidden>
       <span class="chip" id="score">0 cleared</span>
+      <span class="chip" id="hearts" hidden aria-label="Hearts left"></span>
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
-      <button id="oracle" class="hud-extra" aria-pressed="false" hidden title="Spend an oracle on a hidden cell (O)">✨ Oracle</button>
-      <button id="iceclear" class="hud-extra" aria-pressed="false" hidden title="Make a whole stretch of water see-through (I)">❄ Ice clearer</button>
       <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
       <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <span class="chip hud-extra" id="pos">0, 0</span>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
-        <span class="ico">☰</span><span class="lbl"> Menu</span><span id="menu-badge" class="dot" hidden>✨</span>
+        <span class="ico">☰</span><span class="lbl"> Menu</span>
       </button>
     </div>
 
     <!-- Floating Reveal/Flag switch for phones -->
     <button id="fab" hidden aria-pressed="false" aria-label="Switch between revealing and flagging" title="Reveal / Flag">
-      <span id="fab-ico">⛏</span>
+      <span class="sw-knob"></span><span class="sw-ico sw-n">🏴</span><span class="sw-ico sw-l">🚩</span><span class="sw-ico sw-r">⛏</span>
     </button>
+
+    <div id="vignette" hidden></div>
+
+    <!-- Phones: shows up when you are far from the start, and takes you back -->
+    <button id="recenter" class="float-btn" hidden aria-label="Back to the start" title="Back to the start">⌖</button>
+
+    <!-- Space maps with the switch hidden: picks the kind of flag a long press places -->
+    <button id="flag-kind" class="float-btn" hidden aria-label="Kind of flag" title="Normal flag or negative flag">🚩</button>
+
+    <!-- Power-ups: round buttons, tap to arm them, tap again to put them away -->
+    <div id="powerups">
+      <button id="oracle" class="pu" aria-pressed="false" hidden aria-label="Oracle" title="Oracle: tap a hidden cell to learn the truth about it (O)"><span class="pu-ico">✨</span><span class="pu-n" id="oracle-n"></span></button>
+      <button id="iceclear" class="pu" aria-pressed="false" hidden aria-label="Ice clearer" title="Ice clearer: make a whole stretch of water see-through (I)"><span class="pu-ico">❄</span><span class="pu-n" id="ice-n"></span></button>
+    </div>
+
+    <!-- First time a power-up is armed: what it does -->
+    <div id="pu-tip" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="pu-tip-title"></div>
+        <div id="pu-tip-stage" class="tip-stage" aria-hidden="true"></div>
+        <p id="pu-tip-text"></p>
+        <button id="pu-tip-ok" class="primary">Got it</button>
+      </div>
+    </div>
+
+    <!-- First time on level 1: a short animated walkthrough -->
+    <div id="tutorial" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="tut-title"></div>
+        <div id="tut-stage" class="tip-stage" aria-hidden="true"></div>
+        <p id="tut-text"></p>
+        <div id="tut-dots" class="tut-dots" aria-hidden="true"></div>
+        <div class="row">
+          <button id="tut-skip">Skip</button>
+          <button id="tut-next" class="primary">Next</button>
+        </div>
+      </div>
+    </div>
 
     <div id="toast" role="status" hidden></div>
 
@@ -60,6 +97,7 @@
       <div class="row">
         <button id="b-3d" class="primary" hidden>🌍 See it in 3D</button>
         <button id="b-progress" hidden>📊 View progress</button>
+        <button id="b-next" class="primary" hidden>Next level ▶</button>
         <button id="b-restart" class="primary">↻ Restart</button>
         <button id="b-look">👁 Look around</button>
         <button id="b-menu">☰ Menu</button>
@@ -80,17 +118,38 @@
           <b id="pause-name"></b>
           <button id="p-resume" aria-label="Close menu">✕</button>
         </div>
-        <div class="menu-info" id="menu-pos"></div>
-        <div class="seg" id="m-mode">
+        <div class="menu-info desk-only" id="menu-pos"></div>
+        <div class="seg desk-only" id="m-mode">
           <button type="button" data-v="reveal">⛏ Reveal</button>
           <button type="button" data-v="flag">🚩 Flag</button>
+          <button type="button" data-v="neg" hidden>🏴 Negative</button>
         </div>
-        <button id="m-center">⌖ Center on the start</button>
-        <button id="m-progress">📊 View progress</button>
-        <button id="m-oracle" hidden>✨ Oracle</button>
-        <button id="m-ice" hidden>❄ Ice clearer</button>
-        <button id="m-3d" hidden>🌍 View the island in 3D</button>
-        <div class="menu-toggles">
+        <button id="m-center" class="desk-only">⌖ Center on the start</button>
+        <button id="m-progress" class="desk-only">📊 View progress</button>
+        <button id="m-3d" class="desk-only" hidden>🌍 View the island in 3D</button>
+        <div class="touch-menu mobile-only">
+          <div class="quick-row">
+            <button class="float-btn" data-quick="music" aria-label="Music"></button>
+            <button class="float-btn" data-quick="sound" aria-label="Sound"></button>
+            <button class="float-btn" data-quick="vibration" aria-label="Vibration"></button>
+          </div>
+          <label class="switch">
+            <b>Show borders</b>
+            <input type="checkbox" data-setting="chunkBorders" />
+          </label>
+          <label class="dm-row">
+            <b>Dark paper</b>
+            <span class="dm">
+              <input type="checkbox" data-setting="darkPaper" aria-label="Dark paper" />
+              <span class="dm-track"><span class="dm-ico">☀</span><span class="dm-ico">☾</span><span class="dm-knob"></span></span>
+            </span>
+          </label>
+          <button id="pm-3d" hidden>🌍 See it in 3D</button>
+          <button id="pm-advanced">⚙ Advanced</button>
+          <button id="pm-restart">↻ Restart</button>
+          <button id="pm-exit" class="primary">← Back to menu</button>
+        </div>
+        <div class="menu-toggles desk-only">
         <label class="switch">
           <b>Reveal animations</b>
           <input type="checkbox" id="m-animations" data-setting="animations" />
@@ -111,13 +170,11 @@
           <b>Music</b>
           <input type="checkbox" id="m-music" data-setting="music" />
         </label>
-        <div class="switch choice-row">
-          <b>Music style</b>
-          <div class="seg" data-setting-choice="musicStyle" id="m-musicStyle">
-            <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="rain">Rain</button>
-            <button type="button" data-v="jazz">Jazz</button>
-          </div>
+        <div class="player" aria-label="Music player">
+          <button type="button" class="pl-btn" data-music="prev" aria-label="Previous track">⏮</button>
+          <div class="pl-title"><b data-music-title></b><small data-music-artist></small></div>
+          <button type="button" class="pl-btn" data-music="next" aria-label="Next track">⏭</button>
+          <button type="button" class="pl-btn" data-music="repeat" aria-pressed="true" aria-label="Repeat this track" title="Repeat this track">🔁</button>
         </div>
         <div class="range-row">
           <b>Music volume</b>
@@ -141,7 +198,7 @@
           <input type="checkbox" id="m-chunkBorders" data-setting="chunkBorders" />
         </label>
         </div>
-        <div class="row">
+        <div class="row desk-only">
           <button id="p-restart">↻ Restart</button>
           <button id="p-exit" class="primary">⌂ Save &amp; exit</button>
         </div>
@@ -162,6 +219,11 @@
           <input type="checkbox" id="s-waves" data-setting="waves" />
           <small>Gentle waves along island shores.</small>
         </label>
+        <label class="switch touch-only">
+          <b>Reveal / flag switch</b>
+          <input type="checkbox" id="s-modeSwitch" data-setting="modeSwitch" />
+          <small>Phones: the floating switch that changes between revealing and flagging. Turn it off if you prefer pressing and holding to flag.</small>
+        </label>
         <label class="switch">
           <b>Keyboard movement</b>
           <input type="checkbox" id="s-keyboardMove" data-setting="keyboardMove" />
@@ -180,16 +242,13 @@
         <label class="switch">
           <b>Music</b>
           <input type="checkbox" id="s-music" data-setting="music" />
-          <small>A calm, generative soundtrack that answers your actions.</small>
+          <small>Calm background tracks. Each map has its own, and you can change it below.</small>
         </label>
-        <div class="switch choice-row">
-          <b>Music style</b>
-          <div class="seg" data-setting-choice="musicStyle" id="s-musicStyle">
-            <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="rain">Rain</button>
-            <button type="button" data-v="jazz">Jazz</button>
-          </div>
-          <small>Dawn: sunny lo-fi · Rain: late-night lo-fi · Jazz: smoky lo-fi jazz</small>
+        <div class="player" aria-label="Music player">
+          <button type="button" class="pl-btn" data-music="prev" aria-label="Previous track">⏮</button>
+          <div class="pl-title"><b data-music-title></b><small data-music-artist></small></div>
+          <button type="button" class="pl-btn" data-music="next" aria-label="Next track">⏭</button>
+          <button type="button" class="pl-btn" data-music="repeat" aria-pressed="true" aria-label="Repeat this track" title="Repeat this track">🔁</button>
         </div>
         <div class="range-row">
           <b>Music volume</b>
@@ -208,49 +267,103 @@
             <button type="button" data-v="colored">Colored</button>
           </div>
         </div>
+        <details class="credits">
+          <summary>Music credits</summary>
+          <div id="credits"></div>
+        </details>
         <div class="adv-title">Advanced</div>
         <label class="switch">
           <b>Show chunk borders</b>
           <input type="checkbox" id="s-chunks" data-setting="chunkBorders" />
           <small>Outlines the 16×16 cleanup chunks and marks finished ones. Handy for testing.</small>
         </label>
+        <div class="adv-title">Data</div>
+        <small class="data-note">Deletes every world, trophy, record and setting on this device.</small>
+        <button id="s-clear" class="danger small data-btn">Clear all data</button>
         <div class="stack"><button id="s-close" class="primary">Done</button></div>
       </div>
     </div>
 
     <!-- Main menu -->
     <main id="home-screen" class="screen" hidden>
-      <div class="panel">
+      <div id="home-float" role="toolbar" aria-label="Quick settings">
+        <button id="h-lang" class="float-btn lang-btn" aria-label="Language" title="Language"></button>
+        <button id="h-music" class="float-btn" data-quick="music" aria-label="Music" title="Music"></button>
+        <button id="h-audio" class="float-btn" data-quick="sound" aria-label="Sound" title="Sound effects"></button>
+        <button id="h-vibration" class="float-btn" data-quick="vibration" aria-label="Vibration" title="Vibration"></button>
+        <button id="h-settings" class="float-btn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
+      <a id="h-github" class="float-btn" href="https://github.com/joaobrbr" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">🐙</a>
+      <div class="panel home-panel">
         <header class="title">
+          <img class="logo" src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20256%20256'%20width='256'%20height='256'%3e%3ccircle%20cx='128'%20cy='128'%20r='116'%20fill='%23f4ecd8'%20stroke='%232b2417'%20stroke-width='8'/%3e%3ccircle%20cx='128'%20cy='128'%20r='98'%20fill='none'%20stroke='%232b2417'%20stroke-width='3'%20stroke-dasharray='3%209'%20stroke-linecap='round'/%3e%3cpath%20d='M128%2022l16%2090h-32z'%20fill='%23b3261e'%20stroke='%232b2417'%20stroke-width='5'%20stroke-linejoin='round'/%3e%3cpath%20d='M128%20234l16-90h-32zM22%20128l90-16v32zM234%20128l-90-16v32z'%20fill='%232b2417'%20stroke='%232b2417'%20stroke-width='5'%20stroke-linejoin='round'/%3e%3cpath%20d='M53%2053l50%2050M203%2053l-50%2050M53%20203l50-50M203%20203l-50-50'%20stroke='%232b2417'%20stroke-width='9'%20stroke-linecap='round'/%3e%3ccircle%20cx='128'%20cy='128'%20r='30'%20fill='%232b2417'/%3e%3ccircle%20cx='119'%20cy='119'%20r='7'%20fill='%23fff'%20opacity='.6'/%3e%3c/svg%3e" alt="" width="132" height="132" />
           <h1>Mine's Mapper</h1>
           <p>A cartographer's minefield</p>
         </header>
-        <div class="row actions">
-          <button id="h-continue" class="primary" hidden>▶ Continue</button>
-          <button id="h-new" class="primary">＋ New world</button>
-          <button id="h-daily" class="primary" title="One island per day, the same for everyone">📅 Daily island</button>
-          <button id="h-trophies">🏆 Finished islands</button>
-          <button id="h-stats">📊 Stats</button>
-          <button id="h-settings" aria-label="Settings">⚙ Settings</button>
+        <div class="menu-col">
+          <button id="h-adventure" class="primary big">🗺 Adventure</button>
+          <button id="h-new" class="primary big">🧭 Free expedition</button>
+          <button id="h-daily" class="primary big" title="One island per day, the same for everyone">📅 Daily island</button>
+          <button id="h-trophies" class="big">🏆 Trophy room</button>
+          <button id="h-continue" hidden>▶ Continue</button>
+          <div class="row two">
+            <button id="h-worlds">🗂 My worlds</button>
+            <button id="h-stats">📊 Stats</button>
+          </div>
           <button id="h-install" hidden>⬇ Install app</button>
         </div>
         <p id="ios-hint" class="hint center" hidden>
           To install on iPhone/iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.
         </p>
-        <h2>Your worlds</h2>
-        <div id="worlds"></div>
       </div>
     </main>
 
-    <!-- Finished islands -->
-    <section id="trophies" class="screen" hidden>
+    <!-- My worlds -->
+    <section id="worlds-screen" class="screen has-back" hidden>
+      <button id="worlds-back" class="back-fab" aria-label="Back">← <span class="lbl">Back</span></button>
       <div class="panel">
-        <h1>Finished islands</h1>
+        <h1>My worlds</h1>
+        <p class="hint">Every island and expedition you have started.</p>
+        <div class="row actions"><button id="w-new" class="primary">🧭 Free expedition</button></div>
+        <div id="worlds"></div>
+      </div>
+    </section>
+
+    <!-- Adventure: the levels -->
+    <section id="adventure" class="screen has-back" hidden>
+      <button id="adv-back" class="back-fab" aria-label="Back">← <span class="lbl">Back</span></button>
+      <div class="panel wide">
+        <div class="adv-head">
+          <h1>Adventure</h1>
+          <div id="adv-stars" class="star-total" title="Stars earned"></div>
+        </div>
+        <div id="levels"></div>
+      </div>
+    </section>
+
+    <!-- Level briefing -->
+    <div id="brief" class="overlay" hidden>
+      <div class="dialog">
+        <div class="dialog-title" id="brief-title"></div>
+        <div id="brief-body"></div>
+        <p class="hint" id="brief-goal"></p>
+        <div class="row">
+          <button id="brief-go" class="primary">Begin</button>
+          <button id="brief-cancel">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Finished islands -->
+    <section id="trophies" class="screen has-back" hidden>
+      <button id="trophies-back" class="back-fab" aria-label="Back">← <span class="lbl">Back</span></button>
+      <div class="panel">
+        <h1>Trophy room</h1>
+        <h2>Conquered islands</h2>
         <p class="hint">Every island you have cleared. Open one to see it in 3D.</p>
         <div id="trophy-list"></div>
-        <div class="row actions">
-          <button id="trophies-back" class="primary">← Back</button>
-        </div>
+        <h2>Achievements</h2>
+        <p class="empty">Coming soon</p>
       </div>
     </section>
 
@@ -272,7 +385,8 @@
     </div>
 
     <!-- Stats -->
-    <section id="stats-screen" class="screen" hidden>
+    <section id="stats-screen" class="screen has-back" hidden>
+      <button id="stats-back" class="back-fab" aria-label="Back">← <span class="lbl">Back</span></button>
       <div class="panel">
         <h1>Stats</h1>
         <p class="hint" id="stats-since"></p>
@@ -284,17 +398,17 @@
         <h2>Your worlds</h2>
         <p id="stats-worlds" class="hint"></p>
         <div class="row actions">
-          <button id="stats-back" class="primary">← Back</button>
-          <button id="stats-reset" class="danger">Reset stats</button>
+          <button id="stats-reset" class="danger small">Reset stats</button>
         </div>
       </div>
     </section>
 
     <!-- World creator -->
-    <section id="creator" class="screen" hidden>
+    <section id="creator" class="screen has-back" hidden>
+      <button id="c-cancel" class="back-fab" aria-label="Back">← <span class="lbl">Back</span></button>
       <div class="panel creator-grid">
         <div class="form">
-          <h1>New world</h1>
+          <h1>Free expedition</h1>
 
           <label class="field">
             <span>Name</span>
@@ -302,21 +416,29 @@
           </label>
 
           <fieldset>
+            <legend>Realm</legend>
+            <div class="seg" id="c-realm">
+              <button type="button" data-v="overworld">🌍 Overworld</button>
+              <button type="button" data-v="space" id="c-space-btn">☄ Space</button>
+            </div>
+            <p class="hint" id="c-realm-hint"></p>
+          </fieldset>
+
+          <fieldset>
             <legend>Mode</legend>
             <div class="seg" id="c-mode">
-              <button type="button" data-v="endless">♾ Endless</button>
-              <button type="button" data-v="island">🏝 Island</button>
+              <button type="button" data-v="endless" id="c-endless-btn">♾ Endless</button>
+              <button type="button" data-v="island" id="c-island-btn">🏝 Island</button>
             </div>
             <p class="hint" id="c-mode-hint"></p>
           </fieldset>
 
           <fieldset id="c-size-wrap">
             <legend>Island size</legend>
-            <div class="seg" id="c-size">
-              <button type="button" data-v="96">Small</button>
-              <button type="button" data-v="192">Medium</button>
-              <button type="button" data-v="320">Large</button>
-            </div>
+            <label class="slider">
+              <span>Size <b id="c-size-val"></b></span>
+              <input type="range" id="c-size" min="0" max="4" step="1" />
+            </label>
           </fieldset>
 
           <div class="field">
@@ -345,13 +467,21 @@
               <input type="range" id="c-d1" min="5" max="45" />
             </label>
           </fieldset>
+
+          <details class="advanced" id="c-advanced">
+            <summary>Advanced options</summary>
+            <label class="slider">
+              <span>Hearts (mistakes you can survive) <b id="c-hearts-val"></b></span>
+              <input type="range" id="c-hearts" min="0" max="9" step="1" />
+            </label>
+            <p class="hint">With hearts, stepping on a mine costs one heart instead of ending the game. Off by default.</p>
+          </details>
         </div>
 
         <div class="side">
           <canvas id="c-preview"></canvas>
           <p class="hint" id="c-stats"></p>
           <div class="row">
-            <button type="button" id="c-cancel">Cancel</button>
             <button type="button" id="c-create" class="primary">Create &amp; play</button>
           </div>
         </div>

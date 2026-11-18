@@ -1,8 +1,8 @@
 // Mine's Mapper service worker. The version and the precache list below are filled in at build
 // time (see vite.config.ts), so every deploy gets a fresh cache and old ones are dropped.
-const VERSION = '6472541f16';
+const VERSION = '27532c2c9f';
 const CACHE = `minefield-${VERSION}`;
-const PRECACHE = ["./","assets/cinzel-latin-700-normal-Dkw14w9r.woff2","assets/index-CTTMTyhA.css","assets/index-Dyi897xv.js","assets/kalam-latin-700-normal-D2H-9ISU.woff2","assets/minefield_bg-BRI37X6W.wasm","assets/music-DLVcjwsF.js","assets/render-C-9euVI7.js","assets/viewer3d-Ch4fM-kr.js","manifest.webmanifest","favicon.svg","icon.svg","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
+const PRECACHE = ["./","assets/cinzel-latin-700-normal-Dkw14w9r.woff2","assets/index-BaprCxm4.css","assets/index-Cp0zXVOt.js","assets/kalam-latin-700-normal-D2H-9ISU.woff2","assets/minefield_bg-ByCTPHjR.wasm","assets/render-Bh3h91EG.js","assets/viewer3d-DvuLHKRQ.js","manifest.webmanifest","favicon.svg","icon.svg","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
       (hit) =>
         hit ||
         fetch(request).then((response) => {
-          if (response.ok) {
+          if (response.status === 200) {
             const copy = response.clone();
             caches.open(CACHE).then((cache) => cache.put(request, copy));
           }
