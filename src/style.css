@@ -1058,8 +1058,8 @@ input:not([type]) {
 .home-panel::after {
   content: '';
   position: absolute;
-  left: -10px;
-  right: -10px;
+  left: -6.65%;
+  width: 111.7%;
   aspect-ratio: 420 / 56;
   background-size: 100% 100%;
   background-repeat: no-repeat;
