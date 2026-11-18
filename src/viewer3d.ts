@@ -66,7 +66,33 @@ function blurWhere(src: Float32Array, n: number, use: (i: number) => boolean, r:
 }
 
 /** How tall each biome stands (0..1 of the tallest peak): shores low, forests middling, rock and snow high. */
-const BIOME_HEIGHT = [0, 0, 0.04, 0.16, 0.34, 0.16, 0.2, 0.3, 0.32, 0.06, 0.42, 0.46, 0.72, 1];
+const BIOME_HEIGHT = [0, 0, 0.01, 0.16, 0.34, 0.16, 0.2, 0.3, 0.32, 0.06, 0.42, 0.46, 0.72, 1];
+
+/** Steps from each cell to the nearest cell where `stop(i)` holds (4-neighbour, so a little diamond-shaped). */
+function distanceTo(n: number, stop: (i: number) => boolean) {
+  const d = new Float32Array(n * n).fill(1e9);
+  const queue: number[] = [];
+  for (let i = 0; i < n * n; i++) {
+    if (stop(i)) {
+      d[i] = 0;
+      queue.push(i);
+    }
+  }
+  for (let h = 0; h < queue.length; h++) {
+    const i = queue[h];
+    const [ix, iz] = [i % n, Math.floor(i / n)];
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const [x, z] = [ix + dx, iz + dz];
+      if (x < 0 || z < 0 || x >= n || z >= n) continue;
+      const j = z * n + x;
+      if (d[j] > d[i] + 1) {
+        d[j] = d[i] + 1;
+        queue.push(j);
+      }
+    }
+  }
+  return d;
+}
 
 export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
   if (data.space) return openMeteor(stage, data);
@@ -84,6 +110,17 @@ export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
     const e = (cells[i * 2 + 1] / 255 - SEA) / (1 - SEA);
     base[i] = isLand(i) ? 0.75 * (BIOME_HEIGHT[cells[i * 2]] ?? 0.3) + 0.25 * Math.max(0, e) : 0;
   }
+  // mountains are pointy: rock and snow keep rising towards the middle of the range, never a flat plateau
+  const high = (i: number) => !isLand(i) || cells[i * 2] < 12;
+  const inland = distanceTo(n, high);
+  // the shore stays low: height grows with the distance from the water
+  const shore = distanceTo(n, (i) => !isLand(i));
+  for (let i = 0; i < n * n; i++) {
+    if (!isLand(i)) continue;
+    if (cells[i * 2] >= 12) base[i] += Math.min(0.7, inland[i] * 0.07);
+    const s = Math.min(1, shore[i] / 6);
+    base[i] *= 0.15 + 0.85 * s * s * (3 - 2 * s);
+  }
   const level = blurWhere(base, n, isLand, 2, 2);
   const positions = new Float32Array(n * n * 3);
   const colors = new Float32Array(n * n * 3);
@@ -94,7 +131,7 @@ export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
       const biome = cells[i * 2];
       const e = cells[i * 2 + 1] / 255;
       const land = e >= SEA;
-      const y = land ? Math.max(0.15, level[i]) * heightScale : (e - SEA) * depthScale;
+      const y = land ? Math.max(0.04, level[i]) * heightScale : (e - SEA) * depthScale;
       positions.set([ix - half, y, iz - half], i * 3);
 
       let r: number;
@@ -299,7 +336,7 @@ function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
   for (let i = 0; i < count; i++) {
     const t = Math.min(1, Math.max(0, edgeSmooth[i] - eMin) / reach); // 0 on the outermost rock, so top and underside meet
     const lump = t * t * (3 - 2 * t); // eases off the rim: no steep stair-stepped cliff
-    const relief = land(i) ? craterRel[i] * n * 0.05 + (elev[i] - smooth[i]) * n * 0.15 : 0;
+    const relief = land(i) ? craterRel[i] * n * 0.03 + (elev[i] - smooth[i]) * n * 0.1 : 0;
     top[i] = land(i) ? n * 0.1 * lump + relief : 0;
     const c = BIOME_COLORS[cells[i * 2]] ?? BIOME_COLORS[14];
     const f = 0.92 + Math.max(-0.2, Math.min(0.3, relief / (n * 0.1)));

@@ -1032,6 +1032,7 @@ function pinchMetrics() {
 }
 
 canvas.addEventListener('pointerdown', (e) => {
+  lastPointerTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
   if (!active) return;
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY });
@@ -1101,6 +1102,8 @@ function endPointer(e: PointerEvent, cancelled: boolean) {
 // at once, so chording stays instant; the second tap of a pair is simply used for the zoom, and
 // double-tapping a hidden cell never zooms (it just reveals, then the cell is discovered).
 const DOUBLE_TAP_MS = 300;
+/** Double-tap zoom is for touch screens only; on a computer the wheel zooms. */
+let lastPointerTouch = false;
 let lastDiscoveredTap: { x: number; y: number; t: number } | null = null;
 
 function cancelPendingTap() {
@@ -1122,7 +1125,7 @@ function handleTap(px: number, py: number, secondary: boolean) {
     return;
   }
   const now = performance.now();
-  if (lastDiscoveredTap && now - lastDiscoveredTap.t < DOUBLE_TAP_MS && Math.hypot(px - lastDiscoveredTap.x, py - lastDiscoveredTap.y) < 36) {
+  if (lastPointerTouch && lastDiscoveredTap && now - lastDiscoveredTap.t < DOUBLE_TAP_MS && Math.hypot(px - lastDiscoveredTap.x, py - lastDiscoveredTap.y) < 36) {
     lastDiscoveredTap = null;
     doubleTapZoom(cx, cy);
     return;

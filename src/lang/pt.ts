@@ -280,11 +280,11 @@ export const PT: Record<string, string> = {
     'Abra uma casa de um lago e a água vira gelo transparente. Você pode abrir o gelo e limpá-lo como se fosse terra.',
   'Sometimes a rare ice crystal hides under a safe square. Spend it on a lake to make the whole stretch of water see-through, with mines faintly visible.':
     'Às vezes um raro cristal de gelo se esconde sob uma casa segura. Gaste-o num lago para deixar o trecho inteiro de água transparente, com as minas levemente visíveis.',
-  'A guiding star': 'Uma estrela-guia',
+  'The seeing glass': 'A lupa',
   'Find the oracles and clear the area.': 'Ache os oráculos e limpe a área.',
-  'Some safe squares hide a golden star: an oracle. You collect it when you reveal that square.': 'Algumas casas seguras escondem uma estrela dourada: um oráculo. Você o pega ao abrir essa casa.',
-  'Press the Oracle button and tap a hidden square next to explored ground. If it is safe it opens, and if it hides a mine it gets flagged. Use it when you would otherwise have to guess.':
-    'Aperte o botão do Oráculo e toque numa casa escondida ao lado de terreno explorado. Se for segura ela abre, e se esconder uma mina ela é marcada. Use quando você teria que chutar.',
+  'Some safe squares hide a magnifying glass: an oracle. Tap it to pick it up.': 'Algumas casas seguras escondem uma lupa: um oráculo. Toque nela para pegar.',
+  'Choose the magnifying glass and tap a hidden square next to explored ground. If it is safe it opens, and if it hides a mine it gets flagged. Use it when you would otherwise have to guess.':
+    'Escolha a lupa e toque numa casa escondida ao lado de terreno explorado. Se for segura ela abre, e se esconder uma mina ela é marcada. Use quando você teria que chutar.',
   'There are oracles in the glowing area. Clear it to win.': 'Há oráculos na área brilhante. Limpe-a para vencer.',
   'Thin ice': 'Gelo fino',
   'A larger island and only two hearts.': 'Uma ilha maior e só dois corações.',
