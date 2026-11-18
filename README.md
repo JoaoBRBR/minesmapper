@@ -3,7 +3,7 @@
 A cartographer-themed infinite and island minesweeper. The game core is Rust compiled to WebAssembly, with a
 TypeScript and Vite interface, and it installs as a PWA.
 
-Play it: https://joaobrbr.github.io/rust-tester/
+Play it: https://joaobrbr.github.io/minesmapper/
 
 ## Develop
 
