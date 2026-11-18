@@ -1715,3 +1715,75 @@ button.small {
   margin: 8px 0 0;
   line-height: 1.35;
 }
+
+/* ---- Mark switch: flag | pickaxe, or in space negative flag | flag | pickaxe ---- */
+#fab {
+  width: 98px;
+}
+#fab.three {
+  width: 142px;
+}
+#fab .sw-n {
+  display: none;
+  left: 3px;
+}
+#fab.three .sw-n {
+  display: grid;
+}
+#fab.three .sw-l {
+  left: 47px;
+}
+#fab.three .sw-r {
+  left: 91px;
+  right: auto;
+}
+#fab[data-mode='reveal'] {
+  background: linear-gradient(#4fae6e, #2f8a4f);
+  border-color: #1f5a33;
+}
+#fab[data-mode='flag'] {
+  background: linear-gradient(#ee6a5c, #c53a2b);
+  border-color: #7f241b;
+}
+#fab[data-mode='neg'] {
+  background: linear-gradient(#b571ee, #7a2fc2);
+  border-color: #46187a;
+}
+#fab .sw-knob {
+  transform: translateX(46px);
+}
+#fab[data-mode='flag'] .sw-knob {
+  transform: translateX(0);
+}
+#fab.three[data-mode='neg'] .sw-knob {
+  transform: translateX(0);
+}
+#fab.three[data-mode='flag'] .sw-knob {
+  transform: translateX(44px);
+}
+#fab.three[data-mode='reveal'] .sw-knob {
+  transform: translateX(88px);
+}
+#fab .sw-ico .ic {
+  filter: invert(1);
+  opacity: 0.75;
+}
+#fab[data-mode='neg'] .sw-n .ic,
+#fab[data-mode='flag'] .sw-l .ic,
+#fab[data-mode='reveal'] .sw-r .ic {
+  filter: none;
+  opacity: 1;
+}
+#flag-kind {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 13;
+  width: 56px;
+  height: 56px;
+}
+#flag-kind .ic {
+  width: 34px;
+  height: 34px;
+  vertical-align: 0;
+}

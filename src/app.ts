@@ -1,5 +1,5 @@
 import init from './wasm/pkg/minefield';
-import { setBackground } from './background';
+import { setBackground, setBackgroundRealm } from './background';
 import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Settings } from './settings';
@@ -10,18 +10,19 @@ import { DIFFICULTIES, ISLAND_SIZES, levelConfig, SIZE_STEPS, WORLD_GEN, dailyCo
 import {
   fmtTime,
   initGame,
-  isFlagMode,
+  getMarkMode,
+  toast,
   toggleProgressView,
   loadWorld,
   recenterView,
   setActive,
-  setFlagMode,
+  setMarkMode,
   snapshot,
   thumbnail,
 } from './game';
 import { currentTrack, initMusic, nextTrack, onMusicChange, playMenuMusic, playlist, previousTrack, toggleRepeat, unlockTrack } from './music';
 import { SECRET_TRACK, TRACKS } from './tracks';
-import { LEVELS, getLevel, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
+import { LEVELS, getLevel, isSpaceUnlocked, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
   WORLDGEN_VERSION,
@@ -90,7 +91,8 @@ function saveCurrent(withThumb = false): Promise<void> {
   clearTimeout(saveTimer);
   if (!current || screen !== 'game') return saveChain;
   const s = snapshot();
-  const isWin = s.status === 'won' && current.config.mode === 'island' && !current.config.level;
+  // finished islands become trophies; adventure levels do not, except the space ones (meteors)
+  const isWin = s.status === 'won' && current.config.mode === 'island' && (!current.config.level || current.config.space === true);
   const meta: WorldMeta = {
     ...current,
     status: s.status,
@@ -279,7 +281,13 @@ async function renderHome() {
   }
 }
 
+/** Leaving an overworld game you actually played puts the overworld back on the menu background. */
+function noteLeavingGame() {
+  if (screen === 'game' && current && !current.config.space && snapshot().cleared > 0) setBackgroundRealm(false);
+}
+
 async function goHome() {
+  noteLeavingGame();
   if (screen === 'game') await saveCurrent(true);
   current = null;
   show('home');
@@ -314,7 +322,7 @@ async function openViewer(meta: WorldMeta) {
     world.free();
     const mod = await import('./viewer3d');
     if (token !== viewerToken) return; // closed while loading
-    viewer = mod.openIsland(el('viewer-stage'), { size, cells });
+    viewer = mod.openIsland(el('viewer-stage'), { size, cells, space: world.is_space() });
     viewer.setAutoRotate(autoRotate);
     msg.hidden = true;
   } catch (err) {
@@ -538,6 +546,7 @@ const levelWorldId = (l: LevelDef) => `adv-${l.id}`;
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
 async function openAdventure() {
+  noteLeavingGame();
   if (screen === 'game') await saveCurrent(true);
   current = null;
   show('adventure');
@@ -582,7 +591,7 @@ async function renderAdventure() {
         { class: `level${open ? '' : ' locked'}`, disabled: !open, onclick: () => openBrief(l) },
         node('span', { class: 'lv-pic' }, canvas, node('span', { class: 'lv-num', textContent: String(i + 1) }), ...(open ? [] : [node('span', { class: 'lv-lock', textContent: '🔒' })])),
         node('b', { class: 'lv-title', textContent: l.title }),
-        node('span', { class: 'lv-mode', textContent: l.mode === 'island' ? '🏝 Island' : '♾ Endless' }),
+        node('span', { class: 'lv-mode', textContent: l.space ? (l.mode === 'island' ? '☄ Meteor' : '☾ Moon') : l.mode === 'island' ? '🏝 Island' : '♾ Endless' }),
         node('span', { class: 'lv-stars', textContent: stars(open ? (res?.stars ?? 0) : 0) }),
         node('small', { class: 'lv-status', textContent: status }),
       );
@@ -657,9 +666,11 @@ async function startLevel(l: LevelDef) {
 function syncMenu() {
   el('pause-name').textContent = current?.name ?? '';
   el('menu-pos').textContent = el('pos').textContent ?? '';
-  const flagging = isFlagMode();
+  const mode = getMarkMode();
+  const space = current?.config.space === true;
   document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) => {
-    const on = (b.dataset.v === 'flag') === flagging;
+    if (b.dataset.v === 'neg') b.hidden = !space;
+    const on = b.dataset.v === mode;
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
   });
@@ -678,7 +689,7 @@ const closePause = () => ($pause.hidden = true);
 function bindGameMenu() {
   document.querySelectorAll<HTMLButtonElement>('#m-mode button').forEach((b) =>
     b.addEventListener('click', () => {
-      setFlagMode(b.dataset.v === 'flag');
+      setMarkMode(b.dataset.v as 'reveal' | 'flag' | 'neg');
       closePause();
     }),
   );
@@ -752,6 +763,18 @@ const modeSeg = segmented('c-mode', () => {
   syncCreatorVisibility();
   refreshPreview();
 });
+let spaceUnlocked = false;
+const realmSeg = segmented('c-realm', (v) => {
+  if (v === 'space' && !spaceUnlocked) {
+    realmSeg.set('overworld');
+    toast('Beat a space map in Adventure to unlock Space.');
+    return;
+  }
+  syncCreatorVisibility();
+  refreshPreview();
+});
+const isSpaceRealm = () => realmSeg.get() === 'space';
+const worldKindName = () => (isSpaceRealm() ? (modeSeg.get() === 'island' ? 'Meteor' : 'Moon') : modeSeg.get() === 'island' ? 'Island' : 'Endless');
 const $size = el<HTMLInputElement>('c-size');
 const $hearts = el<HTMLInputElement>('c-hearts');
 const sizeStep = () => SIZE_STEPS[Number($size.value)];
@@ -778,8 +801,28 @@ function syncSliderLabels() {
 
 function syncCreatorVisibility() {
   const island = modeSeg.get() === 'island';
+  const space = isSpaceRealm();
+  const set = (id: string, text: string) => {
+    const b = el(id);
+    if (b.dataset.t !== text) {
+      b.dataset.t = text;
+      b.textContent = text;
+    }
+  };
+  set('c-endless-btn', space ? '☾ Moon' : '♾ Endless');
+  set('c-island-btn', space ? '☄ Meteor' : '🏝 Island');
+  set('c-space-btn', spaceUnlocked ? '☄ Space' : '🔒 Space');
+  el('c-realm-hint').textContent = space
+    ? 'Craters instead of coasts, and a dark sky. Some mines are negative: they subtract from the numbers around them. Use the purple flag for those.'
+    : spaceUnlocked
+      ? ''
+      : 'Space opens when you beat a space map in Adventure.';
   el('c-size-wrap').hidden = !island;
-  el('c-mode-hint').textContent = island
+  el('c-mode-hint').textContent = space
+    ? island
+      ? 'A finite meteor floating in the void. Clear every safe cell to win. You can only reveal near explored ground, and rare oracles hide under safe cells.'
+      : 'An endless cratered moon. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines).'
+    : island
     ? 'A finite island surrounded by water. Clear every safe cell to win, lakes included: water turns to see-through ice once you reach it. You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.'
     : 'An infinite map. Score points by clearing cells: the farther from the start, the more each is worth (and the denser the mines). You can only reveal near explored ground. Rare oracles hide under safe cells: spend one to learn the truth about a cell.';
   el('c-d1-label').firstChild!.textContent = island ? 'Mines at the coast ' : 'Mines far away ';
@@ -796,6 +839,7 @@ function readConfig(): WorldConfig {
     density: Number($d0.value) / 100,
     maxDensity: Number($d1.value) / 100,
     gen: WORLD_GEN,
+    ...(isSpaceRealm() ? { space: true } : {}),
     ...(Number($hearts.value) ? { hearts: Number($hearts.value) } : {}),
   };
 }
@@ -828,6 +872,8 @@ function drawPreview() {
 
 async function openCreator() {
   const n = (await listWorlds()).length + 1;
+  spaceUnlocked = isSpaceUnlocked(await loadProgress());
+  realmSeg.set('overworld');
   modeSeg.set('island');
   $size.value = String(SIZE_STEPS.findIndex((s) => s.size === ISLAND_SIZES.medium));
   $hearts.value = '0';
@@ -848,7 +894,13 @@ function bindCreator() {
   el('c-mode').addEventListener('click', async () => {
     if ($name.dataset.auto) {
       const n = (await listWorlds()).length + 1;
-      $name.value = `${modeSeg.get() === 'island' ? 'Island' : 'Endless'} ${n}`;
+      $name.value = `${worldKindName()} ${n}`;
+    }
+  });
+  el('c-realm').addEventListener('click', async () => {
+    if ($name.dataset.auto) {
+      const n = (await listWorlds()).length + 1;
+      $name.value = `${worldKindName()} ${n}`;
     }
   });
   for (const r of [$size, $hearts])
@@ -1050,8 +1102,11 @@ export async function start() {
   await init();
   await loadStats();
   await backfillTrophies();
-  // a player who already beat the last level has the secret track
-  if ((await loadProgress())[LEVELS[LEVELS.length - 1].id]) unlockTrack(SECRET_TRACK);
+  // a player who already beat a space map has the space track
+  {
+    const done = await loadProgress();
+    if (LEVELS.some((l) => l.space && done[l.id])) unlockTrack(SECRET_TRACK);
+  }
   initTheme();
   initMusic();
   requestPersistence();

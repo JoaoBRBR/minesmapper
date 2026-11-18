@@ -7,6 +7,7 @@
 import {
   BoxGeometry,
   BufferGeometry,
+  Color,
   DirectionalLight,
   DoubleSide,
   Float32BufferAttribute,
@@ -15,6 +16,8 @@ import {
   MeshLambertMaterial,
   MeshPhysicalMaterial,
   PerspectiveCamera,
+  Points,
+  PointsMaterial,
   Scene,
   WebGLRenderer,
 } from 'three';
@@ -25,6 +28,8 @@ export interface IslandData {
   size: number;
   /** `[biome, elevation]` per cell, row-major from the north-west corner (World.island_snapshot). */
   cells: Uint8Array;
+  /** A meteor: a floating rock in the stars instead of an island in the sea. */
+  space?: boolean;
 }
 
 export interface Viewer {
@@ -36,6 +41,7 @@ const SEA = 107 / 255; // matches crate/src/terrain.rs (0.42)
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
+  if (data.space) return openMeteor(stage, data);
   const { size: n, cells } = data;
   const heightScale = n * 0.22; // how tall the highest peaks stand
   const depthScale = n * 0.3; // how deep the sea floor sinks
@@ -184,6 +190,191 @@ export function openIsland(stage: HTMLElement, data: IslandData): Viewer {
       controls.dispose();
       for (const g of [terrain, skirt, seaGeometry]) g.dispose();
       for (const m of [landMaterial, skirtMaterial, seaMaterial]) m.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+}
+
+/**
+ * A meteor: the crater surface on top, a rounded rocky underside below, dark walls where the two
+ * meet, floating in a field of stars. Not an exact model, just something that looks like the map.
+ */
+function openMeteor(stage: HTMLElement, data: IslandData): Viewer {
+  const { size: n, cells } = data;
+  const half = (n - 1) / 2;
+  const land = (i: number) => cells[i * 2 + 1] / 255 >= SEA && cells[i * 2] > 1;
+  const count = n * n;
+  // how far each rock cell is from the edge (4-neighbour steps), so the shape follows the outline
+  const edge = new Float32Array(count).fill(1e9);
+  const queue: number[] = [];
+  for (let i = 0; i < count; i++) {
+    if (!land(i)) {
+      edge[i] = 0;
+      queue.push(i);
+    }
+  }
+  for (let h = 0; h < queue.length; h++) {
+    const i = queue[h];
+    const [ix, iz] = [i % n, Math.floor(i / n)];
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const [nx, nz] = [ix + dx, iz + dz];
+      if (nx < 0 || nz < 0 || nx >= n || nz >= n) continue;
+      const j = nz * n + nx;
+      if (edge[j] > edge[i] + 1) {
+        edge[j] = edge[i] + 1;
+        queue.push(j);
+      }
+    }
+  }
+  // crater relief = elevation minus its own smooth average (a box blur over the rock)
+  const elev = new Float32Array(count);
+  for (let i = 0; i < count; i++) elev[i] = cells[i * 2 + 1] / 255;
+  const blur = (src: Float32Array, horizontal: boolean) => {
+    const out = new Float32Array(count);
+    const r = 5;
+    for (let iz = 0; iz < n; iz++) {
+      for (let ix = 0; ix < n; ix++) {
+        let sum = 0;
+        let k = 0;
+        for (let d = -r; d <= r; d++) {
+          const [x, z] = horizontal ? [ix + d, iz] : [ix, iz + d];
+          if (x < 0 || z < 0 || x >= n || z >= n || !land(z * n + x)) continue;
+          sum += src[z * n + x];
+          k++;
+        }
+        out[iz * n + ix] = k ? sum / k : src[iz * n + ix];
+      }
+    }
+    return out;
+  };
+  const smooth = blur(blur(elev, true), false);
+  const edgeSmooth = blur(blur(blur(blur(edge, true), false), true), false); // rounds off the stair-steps of the distance
+  const top = new Float32Array(count);
+  const bottom = new Float32Array(count);
+  const colors = new Float32Array(count * 3);
+  const reach = Math.max(4, half * 0.5);
+  for (let i = 0; i < count; i++) {
+    const t = Math.min(1, edgeSmooth[i] / reach);
+    const lump = Math.sqrt(t); // rounded: steep at the rim, flat on top
+    const relief = land(i) ? (elev[i] - smooth[i]) * n * 0.7 : 0;
+    top[i] = land(i) ? n * 0.1 * lump + relief : 0;
+    bottom[i] = land(i) ? -(n * 0.035 + n * 0.2 * lump) : 0;
+    const c = BIOME_COLORS[cells[i * 2]] ?? BIOME_COLORS[14];
+    const f = 0.92 + Math.max(-0.2, Math.min(0.3, relief / (n * 0.1)));
+    colors.set([Math.min(1, (c[0] / 255) * f), Math.min(1, (c[1] / 255) * f), Math.min(1, (c[2] / 255) * f)], i * 3);
+  }
+  const full = (qx: number, qz: number) =>
+    qx >= 0 && qz >= 0 && qx < n - 1 && qz < n - 1 && land(qz * n + qx) && land(qz * n + qx + 1) && land((qz + 1) * n + qx) && land((qz + 1) * n + qx + 1);
+
+  const pos: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const vertex = (i: number, y: number, shade: number) => {
+    const iz = Math.floor(i / n);
+    const ix = i % n;
+    pos.push(ix - half, y, iz - half);
+    col.push(colors[i * 3] * shade, colors[i * 3 + 1] * shade, colors[i * 3 + 2] * shade);
+    return pos.length / 3 - 1;
+  };
+  const topIdx = new Map<number, number>();
+  const botIdx = new Map<number, number>();
+  const T = (i: number) => topIdx.get(i) ?? (topIdx.set(i, vertex(i, top[i], 1)), topIdx.get(i)!);
+  const B = (i: number) => botIdx.get(i) ?? (botIdx.set(i, vertex(i, bottom[i], 0.3)), botIdx.get(i)!);
+  for (let qz = 0; qz < n - 1; qz++) {
+    for (let qx = 0; qx < n - 1; qx++) {
+      if (!full(qx, qz)) continue;
+      const a = qz * n + qx;
+      const [b, c, d] = [a + 1, a + n, a + n + 1];
+      idx.push(T(a), T(c), T(b), T(b), T(c), T(d)); // top, facing up
+      idx.push(B(a), B(b), B(c), B(b), B(d), B(c)); // underside, facing down
+    }
+  }
+  // dark walls along every edge that has a full quad on one side only
+  const wall = (p: number, q: number) => {
+    idx.push(T(p), B(p), T(q), T(q), B(p), B(q));
+  };
+  for (let iz = 0; iz < n; iz++) {
+    for (let ix = 0; ix < n - 1; ix++) {
+      if (full(ix, iz - 1) !== full(ix, iz)) wall(iz * n + ix, iz * n + ix + 1); // horizontal edge
+    }
+  }
+  for (let iz = 0; iz < n - 1; iz++) {
+    for (let ix = 0; ix < n; ix++) {
+      if (full(ix - 1, iz) !== full(ix, iz)) wall(iz * n + ix, (iz + 1) * n + ix); // vertical edge
+    }
+  }
+  const rock = new BufferGeometry();
+  rock.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  rock.setAttribute('color', new Float32BufferAttribute(col, 3));
+  rock.setIndex(idx);
+  rock.computeVertexNormals();
+
+  const scene = new Scene();
+  scene.background = new Color(0x05071a);
+  const material = new MeshLambertMaterial({ vertexColors: true, side: DoubleSide });
+  scene.add(new Mesh(rock, material));
+
+  // stars on a big sphere around everything
+  const starPos: number[] = [];
+  for (let k = 0; k < 900; k++) {
+    const u = Math.random() * 2 - 1;
+    const a = Math.random() * Math.PI * 2;
+    const r = n * 9;
+    const s = Math.sqrt(1 - u * u);
+    starPos.push(r * s * Math.cos(a), r * u, r * s * Math.sin(a));
+  }
+  const stars = new BufferGeometry();
+  stars.setAttribute('position', new Float32BufferAttribute(starPos, 3));
+  const starMaterial = new PointsMaterial({ color: 0xffffff, size: n * 0.06, sizeAttenuation: true });
+  scene.add(new Points(stars, starMaterial));
+
+  scene.add(new HemisphereLight(0xb8c8ff, 0x20202a, 0.7));
+  const sun = new DirectionalLight(0xfff4dc, 2.1);
+  sun.position.set(-n * 0.9, n * 0.9, -n * 0.4);
+  scene.add(sun);
+
+  const renderer = new WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  stage.appendChild(renderer.domElement);
+  renderer.domElement.className = 'viewer-canvas';
+  const camera = new PerspectiveCamera(38, 1, 1, n * 30);
+  camera.position.set(n * 1.0, n * 0.7, n * 1.1);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, -n * 0.05, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.8;
+  controls.minDistance = n * 0.5;
+  controls.maxDistance = n * 3.2;
+  controls.update();
+  const resize = () => {
+    const w = Math.max(1, stage.clientWidth);
+    const h = Math.max(1, stage.clientHeight);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  };
+  const observer = new ResizeObserver(resize);
+  observer.observe(stage);
+  resize();
+  renderer.setAnimationLoop(() => {
+    controls.update();
+    renderer.render(scene, camera);
+  });
+  return {
+    setAutoRotate(on) {
+      controls.autoRotate = on;
+    },
+    dispose() {
+      renderer.setAnimationLoop(null);
+      observer.disconnect();
+      controls.dispose();
+      rock.dispose();
+      stars.dispose();
+      material.dispose();
+      starMaterial.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },

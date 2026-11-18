@@ -51,6 +51,10 @@ export const BIOME_COLORS: RGB[] = [
   [176, 190, 170], // tundra
   [128, 124, 118], // rock
   [240, 244, 248], // snow
+  [150, 150, 160], // regolith (space)
+  [72, 76, 96], // crater floor (space)
+  [208, 206, 216], // crater rim (space)
+  [150, 200, 232], // moon ice (space)
 ];
 const SHADE_LEVELS = 32;
 
@@ -70,23 +74,23 @@ const TONES = {
     found: 'rgba(236, 216, 176, 0.5)',
     foam: 'rgba(150, 196, 226, 0.5)',
   },
+  // Moons and meteors: a dark star chart.
+  space: {
+    paper: [20, 24, 46] as RGB,
+    grid: 'rgba(150, 175, 255, 0.15)',
+    coast: 'rgba(196, 214, 255, 0.85)',
+    found: 'rgba(196, 214, 255, 0.5)',
+    foam: 'rgba(0, 0, 0, 0)',
+  },
 };
 type ToneName = keyof typeof TONES;
 let toneName: ToneName = 'light';
+let wantDark = false;
+let spaceMode = false;
+let VOID_PAL: string[] = [];
 
 const mixc = (a: number, b: number, t: number) => a + (b - a) * t;
 const shadeFactor = (level: number) => 0.62 + 0.76 * ((level + 0.5) / SHADE_LEVELS);
-
-function buildPalette(colour: (base: RGB, f: number) => RGB): string[] {
-  const out: string[] = [];
-  for (const base of BIOME_COLORS) {
-    for (let l = 0; l < SHADE_LEVELS; l++) {
-      const c = colour(base, shadeFactor(l));
-      out.push(`rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`);
-    }
-  }
-  return out;
-}
 
 const lit = (base: RGB, f: number): RGB => [Math.min(255, base[0] * f), Math.min(255, base[1] * f), Math.min(255, base[2] * f)];
 const blend = (a: RGB, b: RGB, t: number): RGB => [mixc(a[0], b[0], t), mixc(a[1], b[1], t), mixc(a[2], b[2], t)];
@@ -106,28 +110,54 @@ export const bumpVisuals = () => void visualsVersion++;
 
 /** Picks the paper tone (light parchment or dark) and rebuilds the colour tables. */
 export function setPaperTone(dark: boolean) {
-  const next: ToneName = dark ? 'dark' : 'light';
+  wantDark = dark;
+  rebuildTone();
+}
+
+/** Space maps are drawn on a dark star chart whatever the paper setting is. */
+export function setSpaceTone(on: boolean) {
+  if (on === spaceMode) return;
+  spaceMode = on;
+  rebuildTone();
+}
+
+function rebuildTone() {
+  const next: ToneName = spaceMode ? 'space' : wantDark ? 'dark' : 'light';
   if (next === toneName && CLEAR.length) return;
   toneName = next;
   const paper = TONES[toneName].paper;
+  // In space the two "water" biomes are the void: nearly black.
+  const baseOf = (base: RGB, index: number): RGB => (spaceMode && index < 2 ? [8, 10, 26] : base);
+  const bake = (colour: (base: RGB, f: number) => RGB): string[] => {
+    const out: string[] = [];
+    BIOME_COLORS.forEach((base0, bi) => {
+      const base = baseOf(base0, bi);
+      for (let l = 0; l < SHADE_LEVELS; l++) {
+        const c = colour(base, shadeFactor(l));
+        out.push(`rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`);
+      }
+    });
+    return out;
+  };
   // Revealed land: vivid, but washed into the paper a little so it feels printed on it.
-  CLEAR = buildPalette((base, f) => blend(lit(base, f), paper, 0.1));
+  CLEAR = bake((base, f) => blend(lit(base, f), paper, 0.1));
   // After the game ends, unexplored land is shown faded.
-  REVIEW = buildPalette((base, f) => blend(lit(base, f), paper, 0.38));
+  REVIEW = bake((base, f) => blend(lit(base, f), paper, 0.38));
   const ground = (base: RGB, f: number) => blend(lit(base, f), paper, 0.1);
-  ENGRAVE_DARK = buildPalette((base, f) => {
+  ENGRAVE_DARK = bake((base, f) => {
     const g = ground(base, f);
     return [g[0] * 0.5, g[1] * 0.5, g[2] * 0.5];
   });
-  ENGRAVE_LIGHT = buildPalette((base, f) => {
+  ENGRAVE_LIGHT = bake((base, f) => {
     const g = ground(base, f);
     return [Math.min(255, g[0] * 1.2 + 26), Math.min(255, g[1] * 1.2 + 26), Math.min(255, g[2] * 1.2 + 26)];
   });
   // Unexplored ground is bare paper: nothing about the terrain leaks through.
   const flat = `rgb(${paper[0]},${paper[1]},${paper[2]})`;
   PAPER = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(flat);
+  VOID_PAL = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill('#05071a');
   // Ice: water you can faintly see through. Mostly solid blue, with just a hint of glaze.
-  ICE = buildPalette((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
+  ICE = bake((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
   paperTexture = null;
   bumpVisuals();
 }
@@ -151,7 +181,7 @@ export type ViewMode = 'play' | 'review' | 'preview' | 'progress';
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
   if (b === ST_SEA) return CLEAR;
-  if (b === ST_VOID) return view === 'review' ? CLEAR : PAPER;
+  if (b === ST_VOID) return spaceMode ? VOID_PAL : view === 'review' ? CLEAR : PAPER;
   const state = b & ST_MASK;
   if (state === ST_REVEALED) return CLEAR;
   if (view === 'play' && (state === 0 || state === ST_FLAG) && b & ST_ICE) return ICE;
@@ -220,6 +250,7 @@ export function draw(
   view: ViewMode = 'play',
   fx?: Fx,
 ) {
+  setSpaceTone(world.is_space());
   const { zoom } = cam;
   const x0 = Math.floor(cam.cx - w / 2 / zoom);
   const y0 = Math.floor(cam.cy - h / 2 / zoom);
@@ -258,6 +289,8 @@ export function draw(
       }
     }
   }
+
+  if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
 
   // Pass 2: grid lines, only around cells that are still part of the puzzle (not water, not tidied).
   if (zoom >= 14 && !progress) {
@@ -330,21 +363,31 @@ export function draw(
             drawPickup(ctx, sx + zoom * 0.7, sy + zoom * 0.3, zoom, (data[k + 2] & 1) === 1);
           }
           const n = b & 0x0f;
-          if (n > 0 && zoom >= 12) {
-            if (numberStyle === 'colored') {
+          // space: a purple number is negative, and a "0" can hide mines that cancel out
+          const neg = spaceMode && (data[k + 2] & 2) !== 0;
+          const zero = spaceMode && (data[k + 2] & 4) !== 0;
+          const text = neg ? `\u2212${n}` : String(n);
+          if ((n > 0 || zero) && zoom >= 12) {
+            if (neg) {
+              ctx.lineWidth = Math.max(2, zoom * 0.16);
+              ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+              ctx.strokeText(text, mx, my + zoom * 0.04);
+              ctx.fillStyle = '#8b2fd6';
+              ctx.fillText(text, mx, my + zoom * 0.04);
+            } else if (numberStyle === 'colored') {
               ctx.lineWidth = Math.max(2, zoom * 0.14);
               ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-              ctx.strokeText(String(n), mx, my + zoom * 0.04);
-              ctx.fillStyle = NUMBER_COLORS[n];
-              ctx.fillText(String(n), mx, my + zoom * 0.04);
+              ctx.strokeText(text, mx, my + zoom * 0.04);
+              ctx.fillStyle = NUMBER_COLORS[n] || '#374151';
+              ctx.fillText(text, mx, my + zoom * 0.04);
             } else if (numberStyle === 'engraved') {
               // Engraved into the ground: the cell's own colour, darker, with a pale lip along the
               // lower edge, perfectly upright like a stamped map.
               const pi = paletteIndex(data[k + 1], data[k + 2]);
               ctx.fillStyle = ENGRAVE_LIGHT[pi];
-              ctx.fillText(String(n), mx + zoom * 0.03, my + zoom * 0.055);
+              ctx.fillText(text, mx + zoom * 0.03, my + zoom * 0.055);
               ctx.fillStyle = ENGRAVE_DARK[pi];
-              ctx.fillText(String(n), mx, my + zoom * 0.02);
+              ctx.fillText(text, mx, my + zoom * 0.02);
             } else {
               // Written by hand: a touch of tilt and wobble that is stable per cell.
               const hsh = Math.imul(x0 + c, 73856093) ^ Math.imul(y0 + r, 19349663);
@@ -355,14 +398,14 @@ export function draw(
               ctx.rotate(tilt);
               ctx.lineWidth = Math.max(1.5, zoom * 0.1);
               ctx.strokeStyle = 'rgba(247, 238, 212, 0.7)';
-              ctx.strokeText(String(n), 0, 0);
+              ctx.strokeText(text, 0, 0);
               ctx.fillStyle = INK;
-              ctx.fillText(String(n), 0, 0);
+              ctx.fillText(text, 0, 0);
               ctx.restore();
             }
           }
         } else if (state === ST_FLAG) {
-          drawFlag(ctx, sx, sy, zoom);
+          drawFlag(ctx, sx, sy, zoom, spaceMode && (data[k + 2] & 2) !== 0);
         } else if (state === ST_MINE) {
           const exploded = (b & 1) === 1;
           let scale = 1;
@@ -373,7 +416,7 @@ export function draw(
             const t = (fx.now - fx.mines.t0 - delay) / MINE_POP_MS;
             scale = t <= 0 ? 0 : easeOutBack(Math.min(1, t));
           }
-          if (scale > 0) drawMine(ctx, mx, my, zoom * scale, exploded);
+          if (scale > 0) drawMine(ctx, mx, my, zoom * scale, exploded, spaceMode && (data[k + 2] & 2) !== 0);
         }
       }
     }
@@ -383,14 +426,15 @@ export function draw(
       for (let c = 0; c < cols; c++) {
         const state = data[(r * cols + c) * 3] & ST_MASK;
         if (state === ST_FLAG || state === ST_MINE) {
-          ctx.fillStyle = state === ST_FLAG ? '#dc2626' : '#111827';
+          const negative = spaceMode && (data[(r * cols + c) * 3 + 2] & 2) !== 0;
+          ctx.fillStyle = state === ST_FLAG ? (negative ? '#9333ea' : '#dc2626') : negative ? '#6b21a8' : '#111827';
           ctx.fillRect(px(x0 + c) + 1, py(y0 + r) + 1, size - 2, size - 2);
         }
       }
     }
   }
 
-  if (fx?.waves && (view === 'play' || view === 'review')) {
+  if (fx?.waves && !spaceMode && (view === 'play' || view === 'review')) {
     drawWaves(ctx, data, cols, rows, x0, y0, px, py, zoom, fx.now);
   }
 
@@ -444,6 +488,36 @@ export function draw(
 }
 
 /** A power-up waiting to be tapped: the picture on a soft halo, so it is hard to miss. */
+/** Stars in the void around a meteor: a few points per cell, fixed for each cell. */
+function drawStars(
+  ctx: CanvasRenderingContext2D,
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  x0: number,
+  y0: number,
+  px: (x: number) => number,
+  py: (y: number) => number,
+  zoom: number,
+) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!isVoidCell(data[(r * cols + c) * 3])) continue;
+      const hsh = Math.imul(x0 + c, 374761393) ^ Math.imul(y0 + r, 668265263);
+      const m = Math.imul(hsh ^ (hsh >>> 13), 1274126177) >>> 0;
+      if (m % 100 > 14) continue;
+      const sx = px(x0 + c) + ((m >>> 8) % 100) / 100 * zoom;
+      const sy = py(y0 + r) + ((m >>> 16) % 100) / 100 * zoom;
+      const big = m % 7 === 0;
+      ctx.globalAlpha = 0.45 + ((m >>> 4) % 55) / 100;
+      ctx.fillStyle = m % 5 === 0 ? '#ffe8b0' : m % 5 === 1 ? '#bcd4ff' : '#ffffff';
+      const sz = Math.max(1, Math.round(zoom * (big ? 0.07 : 0.04)));
+      ctx.fillRect(sx, sy, sz, sz);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawPickup(ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, ice: boolean) {
   ctx.fillStyle = ice ? 'rgba(140, 210, 250, 0.55)' : 'rgba(255, 205, 70, 0.55)';
   ctx.beginPath();
@@ -643,16 +717,16 @@ export function drawChunkBorders(
   ctx.restore();
 }
 
-function drawFlag(ctx: CanvasRenderingContext2D, sx: number, sy: number, z: number) {
-  drawGlyph(ctx, 'flag', sx, sy, z);
+function drawFlag(ctx: CanvasRenderingContext2D, sx: number, sy: number, z: number, negative = false) {
+  drawGlyph(ctx, negative ? 'flag-negative' : 'flag', sx, sy, z);
 }
 
-function drawMine(ctx: CanvasRenderingContext2D, mx: number, my: number, z: number, exploded: boolean) {
+function drawMine(ctx: CanvasRenderingContext2D, mx: number, my: number, z: number, exploded: boolean, negative = false) {
   if (exploded) {
     ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
     ctx.fillRect(mx - z / 2, my - z / 2, z, z);
   }
-  drawGlyph(ctx, 'mine', mx - z / 2, my - z / 2, z);
+  drawGlyph(ctx, negative ? 'mine-negative' : 'mine', mx - z / 2, my - z / 2, z);
 }
 
 const TEX = 256;
@@ -718,7 +792,7 @@ function makePaperTexture(dark: boolean): HTMLCanvasElement {
 
 /** Paper grain over the whole map, anchored to the map so it slides with panning. */
 function drawPaperGrain(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number) {
-  paperTexture ??= makePaperTexture(toneName === 'dark');
+  paperTexture ??= makePaperTexture(toneName !== 'light');
   const pattern = ctx.createPattern(paperTexture, 'repeat');
   if (!pattern) return;
   pattern.setTransform(new DOMMatrix().translate(w / 2 - cam.cx * cam.zoom, h / 2 - cam.cy * cam.zoom));

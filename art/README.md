@@ -33,6 +33,8 @@ Open `index.html` in a browser to see all of them at once.
 | `map/oracle-glass.svg` | 64×64 | The oracle power-up (a magnifying glass) lying on a revealed safe square, and the Oracle button. |
 | `map/ice-crystal.svg` | 64×64 | The ice-clearer power-up under a revealed safe square, and the Ice clearer button. |
 | `map/treasure-x.svg` | 64×64 | The X on the treasure levels. |
+| `map/flag-negative.svg` | 64×64 | The purple flag for negative mines (space maps only). |
+| `map/mine-negative.svg` | 64×64 | A negative mine, shown when a space game ends (space maps only). |
 | `ui/heart-full.svg` | 48×48 | A heart you still have (HUD). |
 | `ui/heart-empty.svg` | 48×48 | A heart you lost (HUD). |
 | `ui/star-full.svg` | 48×48 | A level star you earned. |
@@ -66,6 +68,7 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/arrow-right.svg` | 48×48 | Direction arrows (→); the game rotates this one for ← ↑ ↓. |
 | `ui/arrow-back.svg` | 48×48 | Back buttons (←). |
 | `ui/play-next.svg` | 48×48 | Next level / Continue (▶). |
+| `ui/meteor.svg` | 48×48 | Space islands (meteors), in the free-expedition screen (☄). |
 | `ui/skip-prev.svg` | 48×48 | Music: previous track (⏮). |
 | `ui/skip-next.svg` | 48×48 | Music: next track (⏭). |
 | `ui/repeat.svg` | 48×48 | Music: repeat this track (🔁). |

@@ -62,6 +62,7 @@ export function makeWorld(c: WorldConfig): World {
     c.mode === 'island'
       ? World.new_island(c.seed, c.size, c.density, c.maxDensity, c.gen ?? 1)
       : new World(c.seed, c.density, c.maxDensity, ENDLESS_RAMP_LEN);
+  if (c.space) w.set_space(true);
   if (c.hearts) w.set_hearts(c.hearts);
   const level = getLevel(c.level);
   if (level) {
@@ -103,5 +104,6 @@ export function levelConfig(l: LevelDef): WorldConfig {
     gen: WORLD_GEN,
     hearts: l.hearts,
     level: l.id,
+    space: l.space,
   };
 }

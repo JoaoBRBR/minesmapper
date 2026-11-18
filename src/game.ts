@@ -1,4 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
+import { setBackgroundRealm } from './background';
 import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
@@ -9,7 +10,7 @@ import { sound } from './sound';
 import { defaultForMap, playTrack, unlockTrack } from './music';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
-import { LEVELS, getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
+import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
 export interface GameCallbacks {
@@ -64,6 +65,7 @@ const $progressBar = el('progress-bar');
 const $progressText = el('progress-text');
 const $progressBtn = el<HTMLButtonElement>('progress');
 const $fab = el<HTMLButtonElement>('fab');
+const $flagKind = el<HTMLButtonElement>('flag-kind');
 const $bannerTitle = el('banner-title');
 const $bannerSub = el('banner-sub');
 const $bNext = el<HTMLButtonElement>('b-next');
@@ -78,6 +80,10 @@ let cfg: WorldConfig | null = null;
 let wonRecord = false;
 let active = false;
 let flagMode = false;
+/** Which flag a tap or a long press places in a space world: false = normal (red), true = negative (purple). */
+let negKind = false;
+/** Set while one tap places a specific kind (the G key), whatever the current kind is. */
+let kindOverride: boolean | null = null;
 /** True after pressing the Oracle button: the next tap on a hidden cell spends one. */
 let oracleMode = false;
 /** Same idea for the ice clearer: the next tap on a water cell spends one. */
@@ -156,7 +162,7 @@ export function loadWorld(
   world?.free();
   cfg = config;
   level = getLevel(config.level);
-  playTrack(defaultForMap(config.mode, level?.id, !!config.daily));
+  playTrack(defaultForMap(config.mode, level?.id, !!config.daily, !!config.space));
   // "home" is the middle of the start area on levels that have one
   const sr = level ? startRect(level) : null;
   HOME.x = sr ? (sr[0] + sr[2] + 1) / 2 : 0.5;
@@ -484,7 +490,7 @@ function updateHud(now: number) {
   if (progressView) setText($progressText, progressSummary(wd));
   // the floating Reveal/Flag button (phones)
   $fab.hidden = progressView || !settings.modeSwitch;
-  $fab.setAttribute('aria-pressed', String(flagMode));
+  syncMarkUi();
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
   updateBanner(now);
@@ -700,7 +706,7 @@ function drawDenied(now: number, d: { x: number; y: number; t0: number }) {
 }
 
 let toastTimer = 0;
-function toast(msg: string) {
+export function toast(msg: string) {
   const el_ = el('toast');
   el_.textContent = msg;
   el_.hidden = false;
@@ -792,7 +798,8 @@ function activate(px: number, py: number, forceFlag: boolean) {
     return;
   }
   if (forceFlag || flagMode) {
-    wd.toggle_flag(x, y);
+    if (wd.is_space() && (kindOverride ?? negKind)) wd.toggle_flag_negative(x, y);
+    else wd.toggle_flag(x, y);
   } else if (isChordable(x, y)) {
     wd.chord(x, y);
   } else if (wd.is_out_of_reach(x, y)) {
@@ -917,6 +924,7 @@ function feedback(
 
   if (!before.over && wd.is_game_over()) {
     bump('losses');
+    setBackgroundRealm(!!cfg?.space);
     sound.boom();
     haptics.boom();
     if (animate) {
@@ -930,9 +938,10 @@ function feedback(
     if (animate) shake();
   } else if (!before.won && wd.is_won()) {
     if (!level) bump('wins');
+    if (cfg?.space) unlockTrack(SECRET_TRACK);
+    setBackgroundRealm(!!cfg?.space);
     const took = startedAt === null ? 0 : clockNow(now) - startedAt;
     if (level) {
-      if (level.id === LEVELS[LEVELS.length - 1].id) unlockTrack(SECRET_TRACK);
       void recordResult(level.id, starsFor(wd.mistakes()), took).then(() => cb.onLevelResult());
     } else if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, took);
     if (cfg?.daily) wonStreak = noteDailyWin(cfg.daily, took);
@@ -1111,10 +1120,43 @@ canvas.addEventListener(
   { passive: false },
 );
 
+export type MarkMode = 'reveal' | 'flag' | 'neg';
+export const getMarkMode = (): MarkMode => (!flagMode ? 'reveal' : negKind ? 'neg' : 'flag');
+
+/** What a tap does: open cells, place a normal flag, or (in space) place a negative flag. */
+export function setMarkMode(m: MarkMode) {
+  flagMode = m !== 'reveal';
+  if (m === 'flag') negKind = false;
+  if (m === 'neg') negKind = true;
+  syncMarkUi();
+}
+
+/** The desktop button and the M key go round: reveal, flag and (in space) negative flag. */
 function toggleFlagMode() {
-  flagMode = !flagMode;
-  $mode.textContent = flagMode ? '🚩 Flag' : '⛏ Reveal';
-  $mode.setAttribute('aria-pressed', String(flagMode));
+  const space = !!world?.is_space();
+  const m = getMarkMode();
+  setMarkMode(m === 'reveal' ? 'flag' : m === 'flag' && space ? 'neg' : 'reveal');
+}
+
+let uiMode = '';
+function syncMarkUi() {
+  const m = getMarkMode();
+  const space = !!world?.is_space();
+  const key = `${m}${space}${settings.modeSwitch}`;
+  if (key === uiMode) return;
+  uiMode = key;
+  $mode.textContent = m === 'reveal' ? '⛏ Reveal' : m === 'neg' ? '🏴 Negative flag' : '🚩 Flag';
+  $mode.setAttribute('aria-pressed', String(m !== 'reveal'));
+  $fab.dataset.mode = m;
+  $fab.classList.toggle('three', space);
+  $fab.setAttribute('aria-pressed', String(m !== 'reveal'));
+  // with the switch hidden, a small button picks the kind of flag a long press places
+  $flagKind.hidden = !(space && !settings.modeSwitch);
+  const kind = negKind ? '🏴' : '🚩';
+  if ($flagKind.dataset.t !== kind) {
+    $flagKind.dataset.t = kind;
+    $flagKind.textContent = kind;
+  }
 }
 
 // --- Desktop keyboard ------------------------------------------------------------------------
@@ -1199,7 +1241,17 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => heldKeys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => heldKeys.clear());
 $mode.addEventListener('click', toggleFlagMode);
-$fab.addEventListener('click', toggleFlagMode);
+$fab.addEventListener('click', (e) => {
+  if (!world?.is_space()) return toggleFlagMode();
+  // three slots in space: negative flag | flag | pickaxe
+  const slot = Math.min(2, Math.max(0, Math.floor(((e.clientX - $fab.getBoundingClientRect().left) / $fab.offsetWidth) * 3)));
+  setMarkMode((['neg', 'flag', 'reveal'] as const)[slot]);
+});
+$flagKind.addEventListener('click', () => {
+  negKind = !negKind;
+  uiMode = '';
+  syncMarkUi();
+});
 $home.addEventListener('click', recenter);
 $recenter.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
@@ -1274,13 +1326,9 @@ function wavesOn() {
 
 // --- Hooks for the in-game menu --------------------------------------------------------------
 
-export const isFlagMode = () => flagMode;
 export const toggleProgressView = () => setProgressView(!progressView);
 export const isProgressView = () => progressView;
 
-export function setFlagMode(on: boolean) {
-  if (on !== flagMode) toggleFlagMode();
-}
 
 export function recenterView() {
   recenter();

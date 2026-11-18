@@ -23,6 +23,8 @@ export interface LevelDef {
   /** Mistakes the player can survive; the next mine ends the level. */
   hearts: number;
   goal: Goal;
+  /** A moon or a meteor: crater terrain, void instead of water, and negative mines. */
+  space?: boolean;
   /**
    * Where the first tap is allowed, as cell corners `[x0, y0, x1, y1]` (inclusive). Chunk goals
    * default to the goal chunk itself. Omit it on islands to allow starting anywhere.
@@ -205,6 +207,59 @@ export const LEVELS: LevelDef[] = [
     hearts: 3,
     goal: { type: 'clear-island' },
   },
+  {
+    id: 'first-meteor',
+    title: 'First meteor',
+    blurb: 'A rock in the void. Some mines are negative.',
+    space: true,
+    intro: [
+      'Welcome to space. This meteor floats in the dark, and its surface is full of craters.',
+      'Out here some mines are negative. A normal mine adds one to the numbers around it, a negative mine takes one away. The number on a square is the sum of both kinds.',
+      'So a 1 may be one normal mine, or two normal mines and a negative one. A "0" with a ring of numbers around it can hide mines that cancel out, while a blank square truly has none.',
+      'Flag normal mines with the red flag and negative ones with the purple flag. Clear every safe square to win.',
+    ],
+    mode: 'island',
+    seed: 147,
+    size: 64,
+    density: 0.075,
+    maxDensity: 0.13,
+    hearts: 3,
+    goal: { type: 'clear-island' },
+  },
+  {
+    id: 'moonwalk',
+    title: 'Moonwalk',
+    blurb: 'Cross a cratered moon and clear the area.',
+    space: true,
+    intro: [
+      'A moon has no sea and no end: only craters, rims and dust.',
+      'Negative mines are hiding here too. Read each number as a sum, and use the purple flag for the mines that subtract.',
+      'Clear the glowing area to win.',
+    ],
+    mode: 'endless',
+    seed: 3,
+    density: 0.1,
+    maxDensity: 0.15,
+    hearts: 3,
+    goal: { type: 'clear-chunk', chunk: [-1, 1] },
+  },
+  {
+    id: 'the-big-rock',
+    title: 'The big rock',
+    blurb: 'A large meteor and only two hearts.',
+    space: true,
+    intro: [
+      'A much bigger meteor, with a long rim of craters, and only two hearts.',
+      'Take your time. Negative mines make every number trickier: count carefully, and let the signs decide each step.',
+    ],
+    mode: 'island',
+    seed: 19,
+    size: 112,
+    density: 0.07,
+    maxDensity: 0.13,
+    hearts: 2,
+    goal: { type: 'clear-island' },
+  },
 ];
 
 export const getLevel = (id: string | undefined) => LEVELS.find((l) => l.id === id);
@@ -237,6 +292,13 @@ export async function recordResult(id: string, stars: number, ms: number): Promi
 
 /** Testing switch: every level is open. Set to false before release. */
 const UNLOCK_ALL = true;
+
+/** Testing switch: lets the free-expedition screen offer Space before a space level is beaten. */
+export const SPACE_OPEN_FOR_TESTING = true;
+
+/** Space opens in the free-expedition screen once any space level has been beaten. */
+export const isSpaceUnlocked = (progress: AdventureProgress) =>
+  SPACE_OPEN_FOR_TESTING || LEVELS.some((l) => l.space && progress[l.id]);
 
 /** A level opens once the one before it has been finished. */
 export const isUnlocked = (progress: AdventureProgress, index: number) =>

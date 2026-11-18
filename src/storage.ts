@@ -28,6 +28,8 @@ export interface WorldConfig {
   daily?: string;
   /** Mistakes allowed before losing (absent or 0 = the first mine ends the game). */
   hearts?: number;
+  /** A moon (endless) or a meteor (island): crater terrain, void, negative mines. */
+  space?: boolean;
   /** Set on adventure levels: the level's id (see levels.ts). */
   level?: string;
 }

@@ -38,13 +38,16 @@
 
     <!-- Floating Reveal/Flag switch for phones -->
     <button id="fab" hidden aria-pressed="false" aria-label="Switch between revealing and flagging" title="Reveal / Flag">
-      <span class="sw-knob"></span><span class="sw-ico sw-l">🚩</span><span class="sw-ico sw-r">⛏</span>
+      <span class="sw-knob"></span><span class="sw-ico sw-n">🏴</span><span class="sw-ico sw-l">🚩</span><span class="sw-ico sw-r">⛏</span>
     </button>
 
     <div id="vignette" hidden></div>
 
     <!-- Phones: shows up when you are far from the start, and takes you back -->
     <button id="recenter" class="float-btn" hidden aria-label="Back to the start" title="Back to the start">⌖</button>
+
+    <!-- Space maps with the switch hidden: picks the kind of flag a long press places -->
+    <button id="flag-kind" class="float-btn" hidden aria-label="Kind of flag" title="Normal flag or negative flag">🚩</button>
 
     <!-- Power-ups: round buttons, tap to arm them, tap again to put them away -->
     <div id="powerups">
@@ -102,6 +105,7 @@
         <div class="seg desk-only" id="m-mode">
           <button type="button" data-v="reveal">⛏ Reveal</button>
           <button type="button" data-v="flag">🚩 Flag</button>
+          <button type="button" data-v="neg" hidden>🏴 Negative</button>
         </div>
         <button id="m-center" class="desk-only">⌖ Center on the start</button>
         <button id="m-progress" class="desk-only">📊 View progress</button>
@@ -390,10 +394,19 @@
           </label>
 
           <fieldset>
+            <legend>Realm</legend>
+            <div class="seg" id="c-realm">
+              <button type="button" data-v="overworld">🌍 Overworld</button>
+              <button type="button" data-v="space" id="c-space-btn">☄ Space</button>
+            </div>
+            <p class="hint" id="c-realm-hint"></p>
+          </fieldset>
+
+          <fieldset>
             <legend>Mode</legend>
             <div class="seg" id="c-mode">
-              <button type="button" data-v="endless">♾ Endless</button>
-              <button type="button" data-v="island">🏝 Island</button>
+              <button type="button" data-v="endless" id="c-endless-btn">♾ Endless</button>
+              <button type="button" data-v="island" id="c-island-btn">🏝 Island</button>
             </div>
             <p class="hint" id="c-mode-hint"></p>
           </fieldset>

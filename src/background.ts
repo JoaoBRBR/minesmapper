@@ -17,6 +17,25 @@ const SPEED = 26; // px per second
 const FRAME_MS = 1000 / 30;
 const POOL_MAX = 12;
 
+const SPACE_KEY = 'minefield.bg.space';
+
+/** Whether the menu shows a space map (after a space game ends) or the overworld. */
+export function setBackgroundRealm(space: boolean) {
+  try {
+    localStorage.setItem(SPACE_KEY, space ? '1' : '0');
+  } catch {
+    /* the background just stays as it is */
+  }
+}
+const backgroundIsSpace = () => {
+  try {
+    return localStorage.getItem(SPACE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+let spaceBg = false;
+
 const canvas = document.querySelector<HTMLCanvasElement>('#bg')!;
 const ctx = canvas.getContext('2d')!;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -88,7 +107,7 @@ function render() {
   if (created) world.clear_chunk_cache();
 
   // A warm wash so the menu reads as a faded map; darker in dark-paper mode.
-  ctx.fillStyle = document.documentElement.dataset.paper === 'dark' ? 'rgba(20, 12, 4, 0.62)' : 'rgba(110, 76, 34, 0.34)';
+  ctx.fillStyle = spaceBg ? 'rgba(4, 6, 24, 0.4)' : document.documentElement.dataset.paper === 'dark' ? 'rgba(20, 12, 4, 0.62)' : 'rgba(110, 76, 34, 0.34)';
   ctx.fillRect(0, 0, w, h);
 }
 
@@ -122,6 +141,8 @@ export function setBackground(on: boolean) {
   if (on) {
     if (world) return; // already running (e.g. menu -> creator)
     world = new World(randomSeed(), 0.15, 0.15, 0);
+    spaceBg = backgroundIsSpace();
+    if (spaceBg) world.set_space(true);
     const angle = Math.random() * Math.PI * 2;
     vx = Math.cos(angle) * SPEED;
     vy = Math.sin(angle) * SPEED;

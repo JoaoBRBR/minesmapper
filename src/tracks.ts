@@ -24,7 +24,7 @@ export const TRACKS: Track[] = [
 /** Played on every menu screen. */
 export const MENU_TRACK = 'menu';
 
-/** Unlocked (and made the default on maps) when the player finishes the last adventure level. */
+/** The default on every space map; joins the playlist once the player beats a space map. */
 export const SECRET_TRACK = 'space';
 
 /** The track a map starts with. Adventure levels by level id, free maps by mode. */

@@ -24,7 +24,7 @@ export const artReady = Promise.all(
   }),
 );
 
-export type Glyph = 'flag' | 'mine' | 'oracle-glass' | 'ice-crystal' | 'treasure-x';
+export type Glyph = 'flag' | 'flag-negative' | 'mine' | 'mine-negative' | 'oracle-glass' | 'ice-crystal' | 'treasure-x';
 
 function glyphAt(name: Glyph, px: number): CanvasImageSource | undefined {
   const img = mapImages.get(name);
@@ -52,12 +52,12 @@ export function drawGlyph(ctx: CanvasRenderingContext2D, name: Glyph, x: number,
 
 /** Text symbol -> icon file (optionally rotated, in quarter turns clockwise from "right"). */
 const TOKENS: Record<string, [string, number?]> = {
-  '🚩': ['flag'], '💣': ['mine'], '✨': ['oracle-glass'], '❄': ['ice-crystal'], '⛏': ['pickaxe'],
+  '🚩': ['flag'], '🏴': ['flag-negative'], '💣': ['mine'], '✨': ['oracle-glass'], '❄': ['ice-crystal'], '⛏': ['pickaxe'],
   '🏝': ['island'], '♾': ['endless'], '📏': ['distance'], '🎯': ['target'], '🧭': ['compass'],
   '📊': ['progress'], '⌖': ['center'], '☰': ['menu'], '🌍': ['globe-3d'], '👁': ['eye'],
   '💥': ['boom'], '🔒': ['lock'], '🏆': ['trophy'], '📅': ['calendar'], '🗺': ['adventure-map'],
   '⚙': ['settings'], '⬇': ['install'], '🎲': ['dice'], '🗑': ['trash'], '🔥': ['flame'],
-  '♪': ['music'], '♫': ['music-off'], '⏮': ['skip-prev'], '⏭': ['skip-next'], '🔁': ['repeat'], '🗂': ['worlds'], '🔊': ['volume'], '🔇': ['volume-off'], '📳': ['vibrate'], '📴': ['vibrate-off'], '🐙': ['github'], '☀': ['sun'], '☾': ['moon'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
+  '♪': ['music'], '♫': ['music-off'], '⏮': ['skip-prev'], '⏭': ['skip-next'], '🔁': ['repeat'], '🗂': ['worlds'], '🔊': ['volume'], '🔇': ['volume-off'], '📳': ['vibrate'], '📴': ['vibrate-off'], '🐙': ['github'], '☀': ['sun'], '☄': ['meteor'], '☾': ['moon'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
   '♥': ['heart-full'], '♡': ['heart-empty'], '★': ['star-full'], '☆': ['star-empty'],
   '→': ['arrow-right'], '←': ['arrow-back'], '↓': ['arrow-right', 1], '↑': ['arrow-right', 3],
 };

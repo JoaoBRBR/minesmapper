@@ -2,6 +2,7 @@
 // node so the volume slider also works on iPhone. Nothing is downloaded until a track is played.
 
 import { onSettingsChange, settings, setSetting } from './settings';
+import { SPACE_OPEN_FOR_TESTING } from './levels';
 import { MAP_TRACKS, MENU_TRACK, SECRET_TRACK, TRACKS, trackById, type Track } from './tracks';
 
 const files = import.meta.glob('../music/*.m4a', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -33,7 +34,7 @@ export const isUnlocked = (id: string) => unlocked.has(id);
 
 /** The tracks the player can step through (secret ones only after they are unlocked). */
 export function playlist(): Track[] {
-  return TRACKS.filter((t) => (!t.secret || unlocked.has(t.id)) && urlOf(t.id));
+  return TRACKS.filter((t) => (!t.secret || unlocked.has(t.id) || SPACE_OPEN_FOR_TESTING) && urlOf(t.id));
 }
 
 export function currentTrack(): Track | undefined {
@@ -91,9 +92,9 @@ function switchTo(id: string) {
   }, FADE_S * 1000);
 }
 
-/** The track a map starts with: the secret one once unlocked, else the one assigned to the map. */
-export function defaultForMap(mode: string, levelId?: string, daily?: boolean): string {
-  if (unlocked.has(SECRET_TRACK)) return SECRET_TRACK;
+/** The track a map starts with: space maps always have the space track, others the one assigned to them. */
+export function defaultForMap(mode: string, levelId?: string, daily?: boolean, space?: boolean): string {
+  if (space) return SECRET_TRACK;
   if (levelId && MAP_TRACKS.byLevel[levelId]) return MAP_TRACKS.byLevel[levelId];
   return MAP_TRACKS.byMode[daily ? 'daily' : mode] ?? MENU_TRACK;
 }
@@ -125,7 +126,7 @@ export function toggleRepeat() {
   setSetting('musicRepeat', !settings.musicRepeat);
 }
 
-/** Beating the last level opens the secret track and makes it the default on maps. */
+/** Beating a space map opens the space track in the playlist. */
 export function unlockTrack(id: string) {
   if (unlocked.has(id)) return;
   unlocked = new Set([...unlocked, id]);
