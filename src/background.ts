@@ -121,7 +121,17 @@ function loop(now: number) {
   render();
 }
 
+let held = false;
+/** Freezes the drifting map (it stays on screen) while a menu is open; used on phones to save battery. */
+export function holdBackground(on: boolean) {
+  if (held === on) return;
+  held = on;
+  if (on) halt();
+  else if (wanted) run();
+}
+
 function run() {
+  if (held) return;
   if (raf || !world || document.hidden || reducedMotion.matches) {
     if (world && !raf) render();
     return;

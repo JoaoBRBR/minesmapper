@@ -518,7 +518,7 @@ function frame(now: number) {
   syncClock(now);
   stepKeyboard(now);
   stepGlide(now);
-  if (wavesOn() && now - lastWave > 66) {
+  if (wavesOn() && now - lastWave > 66 && !(compactHud.matches && !el('pause').hidden)) {
     lastWave = now;
     invalidate();
   }

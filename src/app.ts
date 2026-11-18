@@ -1,5 +1,5 @@
 import init from './wasm/pkg/minefield';
-import { setBackground, setBackgroundRealm } from './background';
+import { holdBackground, setBackground, setBackgroundRealm } from './background';
 import { registerServiceWorker, setupInstall } from './pwa';
 import { haptics, vibrationSupported } from './haptics';
 import { onSettingsChange, prefersReducedMotion, setSetting, settings, type Settings } from './settings';
@@ -1112,6 +1112,19 @@ export async function start() {
     },
   });
   bindCreator();
+  // phones: the drifting background map stops while any menu, screen or dialog covers it
+  const phone = matchMedia('(max-width: 720px), (pointer: coarse)');
+  let holdQueued = false;
+  const syncHold = () => {
+    holdQueued = false;
+    const covered = !!document.querySelector('.overlay:not([hidden]), .screen:not(#home-screen):not([hidden])');
+    holdBackground(phone.matches && covered);
+  };
+  new MutationObserver(() => {
+    if (holdQueued) return;
+    holdQueued = true;
+    requestAnimationFrame(syncHold);
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
   initDebug(toast);
   // screens built from saved progress are redrawn when the switch flips
   onDebugChange(() => {
