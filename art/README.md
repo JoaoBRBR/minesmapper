@@ -75,6 +75,7 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/sun.svg` | 48×48 | Light paper (☀), in the Dark paper switch. |
 | `ui/moon.svg` | 48×48 | Dark paper (☾), in the Dark paper switch. |
 | `app/logo.svg` | 256×256 | The emblem on the main menu (a compass rose that is also a mine). The game name is written next to it as text. |
+| `app/scroll-top.svg`, `app/scroll-bottom.svg` | 420×56 | Test: the rolled paper above and below the main menu panel. |
 | `ui/worlds.svg` | 48×48 | My worlds button (🗂). |
 | `ui/volume.svg` | 48×48 | Audio is on (🔊), floating button on the main menu. |
 | `ui/volume-off.svg` | 48×48 | Audio is off (🔇). |

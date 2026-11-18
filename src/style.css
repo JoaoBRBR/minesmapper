@@ -1050,6 +1050,30 @@ input:not([type]) {
 /* ---- Main menu: one column, floating quick buttons ---- */
 .home-panel {
   max-width: 400px;
+  position: relative;
+  margin: 34px auto;
+}
+/* test: paper rolled up at the top (curl to the right) and at the bottom (curl to the left) */
+.home-panel::before,
+.home-panel::after {
+  content: '';
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  aspect-ratio: 420 / 56;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.home-panel::before {
+  top: 0;
+  transform: translateY(-62%);
+  background-image: url('/art/app/scroll-top.svg');
+}
+.home-panel::after {
+  bottom: 0;
+  transform: translateY(62%);
+  background-image: url('/art/app/scroll-bottom.svg');
 }
 .logo {
   display: block;
