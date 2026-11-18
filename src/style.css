@@ -1637,3 +1637,20 @@ button.small {
     transform: translateX(-50%);
   }
 }
+
+.float-btn[hidden] {
+  display: none;
+}
+#recenter {
+  position: fixed;
+  top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 12;
+  width: 46px;
+  height: 46px;
+}
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  #recenter {
+    display: none !important;
+  }
+}

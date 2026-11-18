@@ -44,6 +44,7 @@ const canvas = el<HTMLCanvasElement>('map');
 const ctx = canvas.getContext('2d')!;
 const $hud = el('hud');
 const $hearts = el('hearts');
+const $recenter = el<HTMLButtonElement>('recenter');
 const $vignette = el('vignette');
 const $score = el('score');
 const $timer = el('timer');
@@ -155,6 +156,10 @@ export function loadWorld(
   world?.free();
   cfg = config;
   level = getLevel(config.level);
+  // "home" is the middle of the start area on levels that have one
+  const sr = level ? startRect(level) : null;
+  HOME.x = sr ? (sr[0] + sr[2] + 1) / 2 : 0.5;
+  HOME.y = sr ? (sr[1] + sr[3] + 1) / 2 : 0.5;
   wonRecord = false;
   world = makeWorld(config);
   if (state && !world.import_state(state)) {
@@ -255,6 +260,7 @@ export function setActive(on: boolean) {
   if (!on) {
     $fab.hidden = true;
     $vignette.hidden = true;
+    $recenter.hidden = true;
   }
   if (!on) {
     $banner.hidden = true;
@@ -412,6 +418,9 @@ function updateBanner(now: number) {
 
 function updateHud(now: number) {
   const wd = world!;
+  // far from the start (two cleanup chunks or more): offer a way back
+  const far = Math.hypot(cam.cx - HOME.x, cam.cy - HOME.y) > 32 && !progressView;
+  if ($recenter.hidden === far) $recenter.hidden = !far;
   const island = wd.is_island();
   const finished = wd.is_game_over() || wd.is_won();
   if (startedAt === null && wd.score() > 0) startedAt = now;
@@ -650,7 +659,7 @@ function drawTreasureX(cx: number, cy: number) {
     ctx.fill();
     return;
   }
-  const size = Math.max(22, cam.zoom * 1.1);
+  const size = Math.max(52, cam.zoom * 1.1); // big even when zoomed far out
   drawGlyph(ctx, 'treasure-x', sx - size / 2, sy - size / 2, size);
 }
 
@@ -1210,6 +1219,7 @@ window.addEventListener('blur', () => heldKeys.clear());
 $mode.addEventListener('click', toggleFlagMode);
 $fab.addEventListener('click', toggleFlagMode);
 $home.addEventListener('click', recenter);
+$recenter.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
 $oracle.addEventListener('click', toggleOracleMode);
 $iceBtn.addEventListener('click', toggleIceMode);
