@@ -346,7 +346,6 @@ button.danger {
   position: fixed;
   inset: 0;
   overflow-y: auto;
-  overflow-x: hidden;
   padding: max(16px, env(safe-area-inset-top)) 16px 32px;
   /* flex + auto margins centre the panel, and still scroll when it is taller than the screen */
   display: flex;
@@ -1059,7 +1058,8 @@ input:not([type]) {
 .home-panel::after {
   content: '';
   position: absolute;
-  width: 120.6%;
+  left: -6.65%;
+  width: 111.7%;
   aspect-ratio: 420 / 56;
   background-size: 100% 100%;
   background-repeat: no-repeat;
@@ -1067,13 +1067,11 @@ input:not([type]) {
 }
 .home-panel::before {
   top: 0;
-  left: -7.18%;
   transform: translateY(-62%);
   background-image: url('/art/app/scroll-top.svg');
 }
 .home-panel::after {
   bottom: 0;
-  right: -7.18%;
   transform: translateY(62%);
   background-image: url('/art/app/scroll-bottom.svg');
 }
@@ -2015,10 +2013,4 @@ button.small {
 @media (prefers-reduced-motion: reduce) {
   .tut *, .tut-hearts *, .tut-stars *, .tut-lose { animation: none !important; }
   .tut-flagimg, .tut-stars .full { opacity: 1 !important; }
-}
-
-/* room for the scroll ends that overhang the menu panel */
-#home-screen {
-  padding-left: 34px;
-  padding-right: 34px;
 }
