@@ -2,13 +2,14 @@ import type { World } from './wasm/pkg/minefield';
 import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
+import { SECRET_TRACK } from './tracks';
 import { maybeShowTip } from './tips';
 import { prefersReducedMotion, settings } from './settings';
 import { sound } from './sound';
-import { flavorOf, musicArea, musicChunk, musicFlag, musicLose, musicMood, musicWin } from './musicBridge';
+import { defaultForMap, playTrack, unlockTrack } from './music';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
-import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
+import { LEVELS, getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
 export interface GameCallbacks {
@@ -128,7 +129,6 @@ let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
 let lastVisuals = visualsVersion;
-let lastMoodCheck = 0;
 /** Phones and touch screens get a compact top bar; the rest lives in the menu. */
 const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
 let endFx: { kind: 'lost' | 'won'; t0: number; origin: [number, number] } | null = null;
@@ -156,6 +156,7 @@ export function loadWorld(
   world?.free();
   cfg = config;
   level = getLevel(config.level);
+  playTrack(defaultForMap(config.mode, level?.id, !!config.daily));
   // "home" is the middle of the start area on levels that have one
   const sr = level ? startRect(level) : null;
   HOME.x = sr ? (sr[0] + sr[2] + 1) / 2 : 0.5;
@@ -484,12 +485,6 @@ function updateHud(now: number) {
   // the floating Reveal/Flag button (phones)
   $fab.hidden = progressView || !settings.modeSwitch;
   $fab.setAttribute('aria-pressed', String(flagMode));
-  if (now - lastMoodCheck > 1500) {
-    // The music follows the biome in the middle of the screen.
-    lastMoodCheck = now;
-    const mid = wd.view(Math.floor(cam.cx), Math.floor(cam.cy), 1, 1);
-    musicMood(flavorOf(mid[0], mid[1]));
-  }
   const [px, py] = [Math.floor(cam.cx), Math.floor(cam.cy)];
   setText($pos, `${px}, ${py} · ${Math.round(wd.density_at(px, py) * 100)}% mines`);
   updateBanner(now);
@@ -855,7 +850,6 @@ function useIceClearer(x: number, y: number) {
       sound.ice();
       haptics.oracle();
       toast('❄ The ice is clear: you can see the mines beneath');
-      musicArea(6, 'ice');
       cb.onChange();
     }
   }
@@ -901,12 +895,6 @@ function feedback(
   bump('cellsCleared', revealed);
   bump('flagsPlaced', flagDelta);
 
-  // Music: the biome under the action colours the notes (desert, ice, ...).
-  const here = wd.view(x, y, 1, 1);
-  const flavor = flavorOf(here[0], here[1]);
-  // With music running, a flag is voiced by its note alone (the plain blip is only a fallback).
-  const flagNote = flagDelta > 0 && musicFlag(flavor);
-  if (revealed >= 5) musicArea(revealed, flavor);
 
   // Cells that opened: ripple outward from the click (breadth-first depth = delay).
   let rippleMs = 0;
@@ -929,7 +917,6 @@ function feedback(
 
   if (!before.over && wd.is_game_over()) {
     bump('losses');
-    musicLose();
     sound.boom();
     haptics.boom();
     if (animate) {
@@ -943,9 +930,9 @@ function feedback(
     if (animate) shake();
   } else if (!before.won && wd.is_won()) {
     if (!level) bump('wins');
-    musicWin();
     const took = startedAt === null ? 0 : clockNow(now) - startedAt;
     if (level) {
+      if (level.id === LEVELS[LEVELS.length - 1].id) unlockTrack(SECRET_TRACK);
       void recordResult(level.id, starsFor(wd.mistakes()), took).then(() => cb.onLevelResult());
     } else if (cfg?.mode === 'island') wonRecord = noteIslandWin(cfg.size, cfg.difficulty, took);
     if (cfg?.daily) wonStreak = noteDailyWin(cfg.daily, took);
@@ -960,7 +947,7 @@ function feedback(
   }
 
   if (flagDelta > 0) {
-    if (!flagNote) sound.flag();
+    sound.flag();
     haptics.flag();
   } else if (flagDelta < 0) {
     sound.unflag();
@@ -970,11 +957,6 @@ function feedback(
   const cleaned = wd.take_clean_log();
   if (cleaned.length > 0) {
     bump('chunksTidied', cleaned.length / 2);
-    {
-      const half = wd.clean_chunk_size() / 2;
-      const mid = wd.view(Math.floor(cleaned[0] * wd.clean_chunk_size() + half), Math.floor(cleaned[1] * wd.clean_chunk_size() + half), 1, 1);
-      musicChunk(flavorOf(mid[0], mid[1]));
-    }
     sound.clean();
     haptics.clean();
     if (animate) {

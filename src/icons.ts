@@ -57,7 +57,7 @@ const TOKENS: Record<string, [string, number?]> = {
   '📊': ['progress'], '⌖': ['center'], '☰': ['menu'], '🌍': ['globe-3d'], '👁': ['eye'],
   '💥': ['boom'], '🔒': ['lock'], '🏆': ['trophy'], '📅': ['calendar'], '🗺': ['adventure-map'],
   '⚙': ['settings'], '⬇': ['install'], '🎲': ['dice'], '🗑': ['trash'], '🔥': ['flame'],
-  '♪': ['music'], '♫': ['music-off'], '🗂': ['worlds'], '🔊': ['volume'], '🔇': ['volume-off'], '📳': ['vibrate'], '📴': ['vibrate-off'], '🐙': ['github'], '☀': ['sun'], '☾': ['moon'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
+  '♪': ['music'], '♫': ['music-off'], '⏮': ['skip-prev'], '⏭': ['skip-next'], '🔁': ['repeat'], '🗂': ['worlds'], '🔊': ['volume'], '🔇': ['volume-off'], '📳': ['vibrate'], '📴': ['vibrate-off'], '🐙': ['github'], '☀': ['sun'], '☾': ['moon'], '✓': ['check'], '✕': ['cross'], '↻': ['restart'], '▶': ['play-next'],
   '♥': ['heart-full'], '♡': ['heart-empty'], '★': ['star-full'], '☆': ['star-empty'],
   '→': ['arrow-right'], '←': ['arrow-back'], '↓': ['arrow-right', 1], '↑': ['arrow-right', 3],
 };

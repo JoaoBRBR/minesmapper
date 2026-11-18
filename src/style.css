@@ -1654,3 +1654,64 @@ button.small {
     display: none !important;
   }
 }
+
+/* ---- Music player: previous / current title / next / repeat ---- */
+.player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--edge-soft);
+}
+.pl-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+.pl-btn .ic {
+  width: 22px;
+  height: 22px;
+  vertical-align: 0;
+}
+.pl-btn[aria-pressed='true'] {
+  background: linear-gradient(var(--accent-2), var(--accent));
+  border-color: var(--accent-edge);
+}
+.pl-btn[aria-pressed='true'] .ic {
+  filter: invert(1);
+}
+.pl-title {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  text-align: center;
+}
+.pl-title b {
+  font: 700 14px var(--serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-title small {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.credits {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.credits summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+#credits p {
+  margin: 8px 0 0;
+  line-height: 1.35;
+}

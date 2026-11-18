@@ -27,7 +27,8 @@ function serviceWorker(): Plugin {
         hash.update(item.type === 'chunk' ? item.code : item.source);
       }
       const version = hash.digest('hex').slice(0, 10);
-      const precache = ['./', ...built, ...PUBLIC_FILES];
+      // the music is streamed when played, not downloaded with the app
+      const precache = ['./', ...built.filter((n) => !n.endsWith('.m4a')), ...PUBLIC_FILES];
       const source = readFileSync('pwa/sw.js', 'utf8')
         .replaceAll('__VERSION__', () => version)
         .replaceAll('__PRECACHE__', () => JSON.stringify(precache));

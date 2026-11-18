@@ -1,10 +1,6 @@
 // Per-device preferences, kept in localStorage (a convenience, not game state).
 
 export type NumberStyle = 'engraved' | 'handwritten' | 'colored';
-export type MusicStyle = 'dawn' | 'rain' | 'jazz';
-const MUSIC_STYLES: MusicStyle[] = ['dawn', 'rain', 'jazz'];
-/** Names used by earlier versions. */
-const OLD_MUSIC_STYLES: Record<string, MusicStyle> = { cloister: 'jazz', deep: 'rain' };
 const NUMBER_STYLES: NumberStyle[] = ['engraved', 'handwritten', 'colored'];
 
 export interface Settings {
@@ -17,10 +13,10 @@ export interface Settings {
   darkPaper: boolean;
   /** How the numbers on the map look. */
   numberStyle: NumberStyle;
-  /** Background music on/off, its style, and its volume (0 to 1). */
+  /** Background music on/off, its volume (0 to 1) and whether a track repeats instead of moving on. */
   music: boolean;
-  musicStyle: MusicStyle;
   musicVolume: number;
+  musicRepeat: boolean;
   /** Gentle animated waves along island shores. */
   waves: boolean;
   /** Desktop: move the map with the arrow keys or WASD. */
@@ -30,7 +26,7 @@ export interface Settings {
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicStyle: 'dawn', musicVolume: 0.6, waves: true, keyboardMove: true, modeSwitch: true };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, numberStyle: 'engraved', music: true, musicVolume: 0.25, musicRepeat: true, waves: true, keyboardMove: true, modeSwitch: true };
 
 function load(): Settings {
   try {
@@ -48,13 +44,12 @@ function load(): Settings {
           ? 'colored'
           : DEFAULTS.numberStyle,
       music: typeof raw.music === 'boolean' ? raw.music : DEFAULTS.music,
-      musicStyle: MUSIC_STYLES.includes(raw.musicStyle)
-        ? raw.musicStyle
-        : (OLD_MUSIC_STYLES[raw.musicStyle] ?? DEFAULTS.musicStyle),
       musicVolume:
-        typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
+        // volumes saved before the audio-file music were on another scale, so they start over
+        raw.musicEngine === 2 && typeof raw.musicVolume === 'number' && raw.musicVolume >= 0 && raw.musicVolume <= 1
           ? raw.musicVolume
           : DEFAULTS.musicVolume,
+      musicRepeat: typeof raw.musicRepeat === 'boolean' ? raw.musicRepeat : DEFAULTS.musicRepeat,
       waves: typeof raw.waves === 'boolean' ? raw.waves : DEFAULTS.waves,
       keyboardMove: typeof raw.keyboardMove === 'boolean' ? raw.keyboardMove : DEFAULTS.keyboardMove,
       modeSwitch: typeof raw.modeSwitch === 'boolean' ? raw.modeSwitch : DEFAULTS.modeSwitch,
@@ -78,7 +73,7 @@ export function setSetting<K extends keyof Settings>(key: K, value: Settings[K])
   settings[key] = value;
   listeners.forEach((cb) => cb());
   try {
-    localStorage.setItem(KEY, JSON.stringify(settings));
+    localStorage.setItem(KEY, JSON.stringify({ ...settings, musicEngine: 2 }));
   } catch {
     /* storage unavailable: the setting still applies for this session */
   }

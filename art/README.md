@@ -66,6 +66,9 @@ Open `index.html` in a browser to see all of them at once.
 | `ui/arrow-right.svg` | 48×48 | Direction arrows (→); the game rotates this one for ← ↑ ↓. |
 | `ui/arrow-back.svg` | 48×48 | Back buttons (←). |
 | `ui/play-next.svg` | 48×48 | Next level / Continue (▶). |
+| `ui/skip-prev.svg` | 48×48 | Music: previous track (⏮). |
+| `ui/skip-next.svg` | 48×48 | Music: next track (⏭). |
+| `ui/repeat.svg` | 48×48 | Music: repeat this track (🔁). |
 | `ui/sun.svg` | 48×48 | Light paper (☀), in the Dark paper switch. |
 | `ui/moon.svg` | 48×48 | Dark paper (☾), in the Dark paper switch. |
 | `app/logo.svg` | 256×256 | The emblem on the main menu (a compass rose that is also a mine). The game name is written next to it as text. |

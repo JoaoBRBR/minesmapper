@@ -148,13 +148,11 @@
           <b>Music</b>
           <input type="checkbox" id="m-music" data-setting="music" />
         </label>
-        <div class="switch choice-row">
-          <b>Music style</b>
-          <div class="seg" data-setting-choice="musicStyle" id="m-musicStyle">
-            <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="rain">Rain</button>
-            <button type="button" data-v="jazz">Jazz</button>
-          </div>
+        <div class="player" aria-label="Music player">
+          <button type="button" class="pl-btn" data-music="prev" aria-label="Previous track">⏮</button>
+          <div class="pl-title"><b data-music-title></b><small data-music-artist></small></div>
+          <button type="button" class="pl-btn" data-music="next" aria-label="Next track">⏭</button>
+          <button type="button" class="pl-btn" data-music="repeat" aria-pressed="true" aria-label="Repeat this track" title="Repeat this track">🔁</button>
         </div>
         <div class="range-row">
           <b>Music volume</b>
@@ -222,16 +220,13 @@
         <label class="switch">
           <b>Music</b>
           <input type="checkbox" id="s-music" data-setting="music" />
-          <small>A calm, generative soundtrack that answers your actions.</small>
+          <small>Calm background tracks. Each map has its own, and you can change it below.</small>
         </label>
-        <div class="switch choice-row">
-          <b>Music style</b>
-          <div class="seg" data-setting-choice="musicStyle" id="s-musicStyle">
-            <button type="button" data-v="dawn">Dawn</button>
-            <button type="button" data-v="rain">Rain</button>
-            <button type="button" data-v="jazz">Jazz</button>
-          </div>
-          <small>Dawn: sunny lo-fi · Rain: late-night lo-fi · Jazz: smoky lo-fi jazz</small>
+        <div class="player" aria-label="Music player">
+          <button type="button" class="pl-btn" data-music="prev" aria-label="Previous track">⏮</button>
+          <div class="pl-title"><b data-music-title></b><small data-music-artist></small></div>
+          <button type="button" class="pl-btn" data-music="next" aria-label="Next track">⏭</button>
+          <button type="button" class="pl-btn" data-music="repeat" aria-pressed="true" aria-label="Repeat this track" title="Repeat this track">🔁</button>
         </div>
         <div class="range-row">
           <b>Music volume</b>
@@ -250,6 +245,10 @@
             <button type="button" data-v="colored">Colored</button>
           </div>
         </div>
+        <details class="credits">
+          <summary>Music credits</summary>
+          <div id="credits"></div>
+        </details>
         <div class="adv-title">Advanced</div>
         <label class="switch">
           <b>Show chunk borders</b>

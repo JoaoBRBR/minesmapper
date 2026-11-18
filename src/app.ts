@@ -19,7 +19,8 @@ import {
   snapshot,
   thumbnail,
 } from './game';
-import { initMusic } from './musicBridge';
+import { currentTrack, initMusic, nextTrack, onMusicChange, playMenuMusic, playlist, previousTrack, toggleRepeat, unlockTrack } from './music';
+import { SECRET_TRACK, TRACKS } from './tracks';
 import { LEVELS, getLevel, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
 import { initTheme } from './theme';
 import {
@@ -74,6 +75,7 @@ function show(next: Screen) {
   else stopPlay();
   setBackground(next !== 'game');
   document.body.classList.toggle('in-game', next === 'game');
+  if (next !== 'game') playMenuMusic();
 }
 
 // --- Persistence ------------------------------------------------------------------------
@@ -968,6 +970,31 @@ function bindSettings() {
   });
 }
 
+/** The previous / next / repeat controls (in Settings and in the desktop game menu) and the credits. */
+function bindMusicPlayer() {
+  const sync = () => {
+    const t = currentTrack();
+    document.querySelectorAll('[data-music-title]').forEach((e) => (e.textContent = t?.title ?? '–'));
+    document.querySelectorAll('[data-music-artist]').forEach((e) => (e.textContent = t?.artist ?? ''));
+    document.querySelectorAll<HTMLElement>('[data-music="repeat"]').forEach((b) => b.setAttribute('aria-pressed', String(settings.musicRepeat)));
+    const open = new Set(playlist().map((p) => p.id));
+    el('credits').replaceChildren(
+      ...TRACKS.filter((t) => open.has(t.id)).map((t) => node('p', {}, ...t.credit.flatMap((l, i) => (i ? [node('br'), l] : [l])))),
+    );
+  };
+  sync();
+  onMusicChange(sync);
+  onSettingsChange(sync);
+  document.querySelectorAll<HTMLElement>('[data-music]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const a = b.dataset.music;
+      if (a === 'prev') previousTrack();
+      else if (a === 'next') nextTrack();
+      else toggleRepeat();
+    }),
+  );
+}
+
 /** The audio and vibration buttons floating on the main menu. */
 function bindQuickToggles() {
   const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-quick]')];
@@ -1023,6 +1050,8 @@ export async function start() {
   await init();
   await loadStats();
   await backfillTrophies();
+  // a player who already beat the last level has the secret track
+  if ((await loadProgress())[LEVELS[LEVELS.length - 1].id]) unlockTrack(SECRET_TRACK);
   initTheme();
   initMusic();
   requestPersistence();
@@ -1056,6 +1085,7 @@ export async function start() {
   el('h-worlds').addEventListener('click', () => show('worlds'));
   el('worlds-back').addEventListener('click', () => void goHome());
   bindQuickToggles();
+  bindMusicPlayer();
   el('h-daily').addEventListener('click', () => void openDaily());
   el('h-adventure').addEventListener('click', () => void openAdventure());
   el('adv-back').addEventListener('click', () => void goHome());
