@@ -24,6 +24,21 @@ Open `index.html` in a browser to see all of them at once.
 6. The mine and the flag are the most seen pictures. Give them the clearest shapes.
 7. Interface icons (`ui/`) are shown at 16-32 px next to text. Use thick, simple strokes.
 
+## The chart pictures (`chart/`)
+
+The little drawings that fill the map when you zoom out on an **island**, like an old pirate chart: one
+picture per biome inside the island, waves / a ship / two sea monsters on the open sea, a lake picture,
+and a house where you start. They are drawn at one fixed size on screen (about 40-68 px), whatever the zoom,
+and only on ground you have not opened yet.
+
+- **One colour only.** The game paints every picture in a single ink colour (dark brown on light paper, a
+  soft gray on dark paper, blue-black for water things), so the colours you use are ignored: only the
+  *shape* counts. Solid fills are allowed and become solid ink.
+- Keep the viewBox `0 0 64 64`, a transparent background, bold lines (about 2.5 wide) and leave a small margin.
+- Pictures are shown small and often side by side, so keep them simple. The forest, jungle and taiga
+  pictures are already *groups* of trees on purpose.
+- You can switch all of them off in Settings → **Map drawings**.
+
 ## Files
 
 | File | Size (viewBox) | Where it is used |
@@ -84,6 +99,26 @@ Open `index.html` in a browser to see all of them at once.
 | `app/icon.svg` | 512×512 | Main app image: home-screen / install icon (rounded square; corners stay transparent). |
 | `app/icon-maskable.svg` | 512×512 | Same picture, full bleed, no rounded corners. Keep everything important inside the central 80% circle: phones crop it. |
 | `app/favicon.svg` | 512×512 | Browser tab icon. Shown at 16-32 px, so keep the picture bold and simple. |
+| `chart/mountain-rock.svg` | 64×64 | Rock mountains: drawn once in rocky areas of an island (map view). |
+| `chart/mountain-snow.svg` | 64×64 | Snowy / ice mountains: one picture for snow areas. |
+| `chart/forest.svg` | 64×64 | Forest: a small group of trees together. |
+| `chart/jungle.svg` | 64×64 | Jungle: a thick leafy clump. |
+| `chart/taiga.svg` | 64×64 | Taiga: a group of pines. |
+| `chart/tundra.svg` | 64×64 | Tundra: a few small pines and tufts. |
+| `chart/beach.svg` | 64×64 | Beach: palm trees along the shore (drawn more often, on thin beaches). |
+| `chart/desert.svg` | 64×64 | Desert: dunes and a cactus. |
+| `chart/badlands.svg` | 64×64 | Badlands: flat-topped rock buttes. |
+| `chart/savanna.svg` | 64×64 | Savanna: an acacia tree. |
+| `chart/grassland.svg` | 64×64 | Grassland: soft hills and grass tufts. |
+| `chart/swamp.svg` | 64×64 | Swamp: reeds in the water. |
+| `chart/lake.svg` | 64×64 | A lake inside the island. |
+| `chart/wave-1.svg` | 64×64 | Open sea, wave variation 1 (outside the island). |
+| `chart/wave-2.svg` | 64×64 | Open sea, wave variation 2. |
+| `chart/wave-3.svg` | 64×64 | Open sea, wave variation 3. |
+| `chart/monster-serpent.svg` | 64×64 | Sea monster 1: a serpent (rare, on the open sea). |
+| `chart/monster-kraken.svg` | 64×64 | Sea monster 2: a kraken (rare, on the open sea). |
+| `chart/ship.svg` | 64×64 | A ship sailing the open sea (rare). |
+| `chart/home.svg` | 64×64 | Home: marks where the island starts. |
 
 Not in this folder, still drawn by the game: the parchment texture and paper grain, the glowing goal border,
 the dashed start square, the sea and land colours, and the red square under an exploded mine.

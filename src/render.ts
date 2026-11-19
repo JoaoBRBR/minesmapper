@@ -442,8 +442,7 @@ export function draw(
   }
 
   if (view === 'play' && !spaceMode && zoom < detailZoom() && settings.mapDrawings && world.is_island()) {
-    drawSeaWaves(ctx, data, cols, rows, x0, y0, cam, w, h);
-    // drawLandDrawings(ctx, data, cols, rows, x0, y0, cam, w, h); // mountains and trees: parked, see above
+    drawMapPictures(ctx, data, cols, rows, x0, y0, cam, w, h);
   }
 
   if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
@@ -941,12 +940,70 @@ function makePaperTexture(dark: boolean): HTMLCanvasElement {
 
 /** Paper grain over the whole map, anchored to the map so it slides with panning. */
 
-/**
- * Old-chart waves: a few little ink strokes scattered over the open sea outside an island, always the same
- * size on screen. They are placed on a jittered grid of world blocks (so they stay put while you pan), and
- * the blocks get bigger as you zoom out so the number on screen stays about the same.
- */
-function drawSeaWaves(
+// --- Old-chart drawings (islands, map view) --------------------------------------------------------
+// Little pictures from art/chart/: one per biome inside the island, waves / a ship / sea monsters on the
+// open sea, a lake picture on lakes. They keep one size on screen at every zoom, sit at fixed spots of the
+// world (so they stay put while panning) and are skipped near anything you have discovered.
+
+const chartUrls = import.meta.glob('../art/chart/*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const chartImages = new Map<string, HTMLImageElement>();
+for (const [path, url] of Object.entries(chartUrls)) {
+  const name = path.split('/').pop()!.replace('.svg', '');
+  const img = new Image();
+  img.onload = () => bumpVisuals(); // redraw once a picture has arrived
+  img.src = url;
+  chartImages.set(name, img);
+}
+const WATER_PICTURES = new Set(['wave-1', 'wave-2', 'wave-3', 'lake', 'ship', 'monster-serpent', 'monster-kraken']);
+const chartTinted = new Map<string, HTMLCanvasElement>();
+const CHART_PX = 128; // the pictures are rasterised once at this size and scaled down when drawn
+
+/** The picture in the ink of the current paper (cached). */
+function chartSprite(name: string): HTMLCanvasElement | null {
+  const img = chartImages.get(name);
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const water = WATER_PICTURES.has(name);
+  const ink =
+    toneName === 'dark'
+      ? water ? 'rgba(172, 172, 176, 0.62)' : 'rgba(186, 182, 172, 0.66)'
+      : water ? 'rgba(28, 42, 60, 0.82)' : 'rgba(66, 44, 22, 0.82)';
+  const key = `${name}|${ink}`;
+  let c = chartTinted.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = c.height = CHART_PX;
+    const g = c.getContext('2d')!;
+    g.drawImage(img, 0, 0, CHART_PX, CHART_PX);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = ink;
+    g.fillRect(0, 0, CHART_PX, CHART_PX);
+    chartTinted.set(key, c);
+  }
+  return c;
+}
+
+/** Draws one chart picture centred on a screen point, `size` CSS pixels wide. */
+export function drawChartPicture(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, size: number) {
+  const c = chartSprite(name);
+  if (c) ctx.drawImage(c, x - size / 2, y - size / 2, size, size);
+}
+
+/** Which picture a biome gets, how big it is, and how often (per block). */
+const LAND_PICTURES: Record<number, [string, number, number]> = {
+  3: ['desert', 50, 0.45],
+  4: ['badlands', 50, 0.45],
+  5: ['savanna', 48, 0.4],
+  6: ['grassland', 48, 0.35],
+  7: ['forest', 56, 0.7],
+  8: ['jungle', 56, 0.7],
+  9: ['swamp', 50, 0.5],
+  10: ['taiga', 56, 0.7],
+  11: ['tundra', 48, 0.45],
+  12: ['mountain-rock', 60, 0.75],
+  13: ['mountain-snow', 60, 0.75],
+};
+
+function drawMapPictures(
   ctx: CanvasRenderingContext2D,
   data: Uint8Array,
   cols: number,
@@ -958,144 +1015,75 @@ function drawSeaWaves(
   h: number,
 ) {
   const zoom = cam.zoom;
-  const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(80 / zoom)))); // cells per block side
-  const bx0 = Math.floor(x0 / block) - 1;
-  const bx1 = Math.floor((x0 + cols) / block) + 1;
-  const by0 = Math.floor(y0 / block) - 1;
-  const by1 = Math.floor((y0 + rows) / block) + 1;
-  const path = new Path2D();
-  for (let by = by0; by <= by1; by++) {
-    for (let bx = bx0; bx <= bx1; bx++) {
-      const hA = hash2(bx * 7 + block, by * 13 + 3);
-      if (hA > 0.7) continue; // not every block gets one
-      const wx = (bx + 0.15 + 0.7 * hash2(bx + 11, by + 5)) * block;
-      const wy = (by + 0.15 + 0.7 * hash2(bx + 29, by + 17)) * block;
-      const c = Math.floor(wx) - x0;
-      const r = Math.floor(wy) - y0;
-      if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
-      if (data[(r * cols + c) * 3] !== ST_VOID) continue;
-      const sx = (wx - cam.cx) * zoom + w / 2;
-      const sy = (wy - cam.cy) * zoom + h / 2;
-      const kind = Math.floor(hA * 5) % 3; // 0 single, 1 double, 2 triple
-      const line = (ox: number, oy: number, half: number) => {
-        path.moveTo(sx + ox - half, sy + oy);
-        path.quadraticCurveTo(sx + ox - half / 2, sy + oy - 5, sx + ox, sy + oy);
-        path.quadraticCurveTo(sx + ox + half / 2, sy + oy + 5, sx + ox + half, sy + oy);
-      };
-      line(0, 0, 14);
-      if (kind >= 1) line(7, 9, 10);
-      if (kind === 2) line(-6, 17, 9);
+  const cellAt = (c: number, r: number) => (c < 0 || r < 0 || c >= cols || r >= rows ? -1 : (r * cols + c) * 3);
+  // blocks of the world, as big as `px` pixels on screen (rounded up to a power of two of cells)
+  const grid = (px: number, salt: number, visit: (wx: number, wy: number, hA: number, c: number, r: number) => void) => {
+    const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(px / zoom))));
+    const bx0 = Math.floor(x0 / block) - 1;
+    const bx1 = Math.floor((x0 + cols) / block) + 1;
+    const by0 = Math.floor(y0 / block) - 1;
+    const by1 = Math.floor((y0 + rows) / block) + 1;
+    for (let by = by0; by <= by1; by++) {
+      for (let bx = bx0; bx <= bx1; bx++) {
+        const hA = hash2(bx * 7 + block + salt, by * 13 + 3);
+        const wx = (bx + 0.2 + 0.6 * hash2(bx + 11 + salt, by + 5)) * block;
+        const wy = (by + 0.2 + 0.6 * hash2(bx + 29 + salt, by + 17)) * block;
+        const c = Math.floor(wx) - x0;
+        const r = Math.floor(wy) - y0;
+        if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+        visit(wx, wy, hA, c, r);
+      }
     }
-  }
-  ctx.save();
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = toneName === 'dark' ? 'rgba(172, 172, 176, 0.6)' : 'rgba(28, 42, 60, 0.82)';
-  ctx.stroke(path);
-  ctx.restore();
-}
+  };
+  const toScreenX = (wx: number) => (wx - cam.cx) * zoom + w / 2;
+  const toScreenY = (wy: number) => (wy - cam.cy) * zoom + h / 2;
+  /** True when ground you have discovered is within the picture's reach. */
+  const nearFound = (c: number, r: number, size: number) => {
+    const m = Math.max(1, Math.ceil(size / 2 / zoom));
+    for (const [dc, dr] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m]]) {
+      const k = cellAt(c + dc, r + dr);
+      if (k >= 0 && (isFoundCell(data[k]) || isTidy(data[k]))) return true;
+    }
+    return false;
+  };
 
-// --- Parked for now (to come back to): mountains and trees on the unexplored inside of an island. ---
-// /**
-//  * Hand-drawn mountains and trees on the unexplored inside of an island, like an old chart. Same idea as the
-//  * waves: fixed screen size, anchored to jittered blocks of the world, skipped near anything discovered.
-//  */
-// function drawLandDrawings(
-//   ctx: CanvasRenderingContext2D,
-//   data: Uint8Array,
-//   cols: number,
-//   rows: number,
-//   x0: number,
-//   y0: number,
-//   cam: Camera,
-//   w: number,
-//   h: number,
-// ) {
-//   const zoom = cam.zoom;
-//   const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(62 / zoom))));
-//   const margin = Math.max(1, Math.ceil(16 / zoom)); // cells the sprite may spill over
-//   const hidden = (c: number, r: number) => {
-//     if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
-//     const b = data[(r * cols + c) * 3];
-//     return b !== ST_VOID && b !== ST_SEA && (b & ST_MASK) !== ST_REVEALED && !isTidy(b);
-//   };
-//   const path = new Path2D();
-//   const bx0 = Math.floor(x0 / block) - 1;
-//   const bx1 = Math.floor((x0 + cols) / block) + 1;
-//   const by0 = Math.floor(y0 / block) - 1;
-//   const by1 = Math.floor((y0 + rows) / block) + 1;
-//   for (let by = by0; by <= by1; by++) {
-//     for (let bx = bx0; bx <= bx1; bx++) {
-//       const hA = hash2(bx * 5 + block + 101, by * 11 + 7);
-//       const wx = (bx + 0.2 + 0.6 * hash2(bx + 41, by + 3)) * block;
-//       const wy = (by + 0.2 + 0.6 * hash2(bx + 53, by + 19)) * block;
-//       const c = Math.floor(wx) - x0;
-//       const r = Math.floor(wy) - y0;
-//       if (!hidden(c, r) || !hidden(c - margin, r) || !hidden(c + margin, r) || !hidden(c, r - margin) || !hidden(c, r + margin)) continue;
-//       const biome = data[(r * cols + c) * 3 + 1];
-//       const sx = (wx - cam.cx) * zoom + w / 2;
-//       const sy = (wy - cam.cy) * zoom + h / 2;
-//       if (biome === 12 || biome === 13) {
-//         if (hA > 0.7) continue;
-//         mountain(path, sx, sy, hA);
-//       } else if (biome === 7 || biome === 8 || biome === 9) {
-//         if (hA > 0.85) continue;
-//         tree(path, sx, sy, false);
-//         if (hA < 0.55) tree(path, sx + 11, sy + 5, false);
-//         if (hA < 0.3) tree(path, sx - 10, sy + 6, false);
-//       } else if (biome === 10 || biome === 11) {
-//         if (hA > 0.8) continue;
-//         tree(path, sx, sy, true);
-//         if (hA < 0.45) tree(path, sx + 9, sy + 4, true);
-//       } else if (biome === 5 || biome === 6) {
-//         if (hA > 0.4) continue;
-//         tree(path, sx, sy, false);
-//       }
-//     }
-//   }
-//   ctx.save();
-//   ctx.lineWidth = 1.6;
-//   ctx.lineCap = 'round';
-//   ctx.lineJoin = 'round';
-//   ctx.strokeStyle = toneName === 'dark' ? 'rgba(186, 182, 172, 0.62)' : 'rgba(66, 44, 22, 0.8)';
-//   ctx.stroke(path);
-//   ctx.restore();
-// }
-//
-// function mountain(path: Path2D, x: number, y: number, v: number) {
-//   const k = 1.55; // drawn larger than the trees
-//   const big = (9 + v * 6) * k;
-//   // the main peak, a smaller one beside it, and a few hatching strokes on the shaded side
-//   path.moveTo(x - big - 3 * k, y + 7 * k);
-//   path.lineTo(x - 2 * k, y + 7 * k - big * 1.9);
-//   path.lineTo(x + big + 3 * k, y + 7 * k);
-//   path.moveTo(x + big * 0.6, y + 7 * k - big * 0.7);
-//   path.lineTo(x + big + 8 * k, y + 7 * k - big * 1.1);
-//   path.lineTo(x + big + 15 * k, y + 7 * k);
-//   path.moveTo(x - 2 * k, y + 7 * k - big * 1.9);
-//   path.lineTo(x + 1 * k, y + 2 * k);
-//   path.moveTo(x + 2 * k, y + 5 * k - big);
-//   path.lineTo(x + 5 * k, y + 7 * k);
-//   path.moveTo(x - 4 * k, y + 6 * k - big * 0.6);
-//   path.lineTo(x - 1 * k, y + 7 * k);
-// }
-//
-// function tree(path: Path2D, x: number, y: number, pine: boolean) {
-//   if (pine) {
-//     path.moveTo(x - 4, y + 3);
-//     path.lineTo(x, y - 7);
-//     path.lineTo(x + 4, y + 3);
-//     path.moveTo(x - 3, y - 1);
-//     path.lineTo(x + 3, y - 1);
-//     path.moveTo(x, y + 3);
-//     path.lineTo(x, y + 6);
-//   } else {
-//     path.moveTo(x + 5, y - 2);
-//     path.arc(x, y - 3, 5, 0, Math.PI * 2);
-//     path.moveTo(x, y + 2);
-//     path.lineTo(x, y + 6);
-//   }
-// }
+  // the open sea: waves, and now and then a ship or a sea monster
+  grid(80, 0, (wx, wy, hA, c, r) => {
+    if (data[cellAt(c, r)] !== ST_VOID) return;
+    let name: string;
+    let size = 40;
+    if (hA < 0.025) [name, size] = ['ship', 60];
+    else if (hA < 0.05) [name, size] = ['monster-serpent', 68];
+    else if (hA < 0.075) [name, size] = ['monster-kraken', 68];
+    else if (hA < 0.72) name = `wave-${1 + (Math.floor(hA * 1000) % 3)}`;
+    else return;
+    drawChartPicture(ctx, name, toScreenX(wx), toScreenY(wy), size);
+  });
+
+  // inside the island: one picture for the biome under each spot, and a picture on lakes
+  grid(112, 500, (wx, wy, hA, c, r) => {
+    const k = cellAt(c, r);
+    const b = data[k];
+    if (b === ST_VOID || b === ST_SEA || isFoundCell(b) || isTidy(b)) return;
+    const biome = data[k + 1];
+    if (biome <= 1) {
+      // water inside the island: a lake
+      if (hA < 0.6 && !nearFound(c, r, 50)) drawChartPicture(ctx, 'lake', toScreenX(wx), toScreenY(wy), 50);
+      return;
+    }
+    const pic = LAND_PICTURES[biome];
+    if (!pic || hA > pic[2] || nearFound(c, r, pic[1])) return;
+    drawChartPicture(ctx, pic[0], toScreenX(wx), toScreenY(wy), pic[1]);
+  });
+
+  // beaches are thin: a finer grid so palm trees line the shore
+  grid(60, 900, (wx, wy, hA, c, r) => {
+    const k = cellAt(c, r);
+    const b = data[k];
+    if (b === ST_VOID || b === ST_SEA || isFoundCell(b) || isTidy(b) || data[k + 1] !== 2) return;
+    if (hA < 0.5 && !nearFound(c, r, 40)) drawChartPicture(ctx, 'beach', toScreenX(wx), toScreenY(wy), 40);
+  });
+}
 
 /** The zoom at which the grain tile is drawn at its natural size. */
 const GRAIN_REF_ZOOM = 32;

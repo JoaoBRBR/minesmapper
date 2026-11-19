@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { setBackgroundRealm } from './background';
-import { draw, drawChunkBorders, detailZoom, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChartPicture, drawChunkBorders, detailZoom, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
 import { tr } from './i18n';
@@ -562,6 +562,11 @@ function render(now: number) {
   renderScene(now);
   if (settings.chunkBorders) drawChunkBorders(ctx, world!, cam, w, h);
   if (level && !progressView) drawLevelMarks(level);
+  // map view: a little house where the island starts
+  if (!progressView && settings.mapDrawings && cam.zoom < detailZoom() && world?.is_island() && !world.is_space()) {
+    const [hx, hy] = toScreen(HOME.x, HOME.y);
+    drawChartPicture(ctx, 'home', hx, hy - 12, 44);
+  }
 }
 
 // --- Adventure markings: the goal area, the start area and the X ------------------------------
