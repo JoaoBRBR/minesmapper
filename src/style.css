@@ -2065,3 +2065,29 @@ body:not(.debug) .debug-only {
 body.no-edge #vintage {
   display: none;
 }
+
+/* ---- Menu eagle (flies over the drifting map when the song cries) ---- */
+.eagle {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(10px 14px 5px rgba(40, 24, 8, 0.35));
+}
+.eagle[hidden] {
+  display: none;
+}
+.eagle img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: auto;
+}
+.eagle img:first-child {
+  position: relative;
+}
+:root[data-paper='dark'] .eagle {
+  filter: invert(0.85) drop-shadow(10px 14px 5px rgba(0, 0, 0, 0.4));
+}

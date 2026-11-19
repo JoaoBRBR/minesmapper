@@ -18,6 +18,7 @@ import {
 } from './game';
 import { lang, setLang, tr } from './i18n';
 import { currentTrack, initMusic, nextTrack, onMusicChange, playMenuMusic, playlist, previousTrack, toggleRepeat, unlockTrack } from './music';
+import { initEagle } from './eagle';
 import { SECRET_TRACK, TRACKS } from './tracks';
 import { initDebug, isDebug, onDebugChange } from './debug';
 import { LEVELS, getLevel, isSpaceUnlocked, isUnlocked, levelNumber, loadProgress, nextLevel, type LevelDef } from './levels';
@@ -1094,6 +1095,7 @@ export async function start() {
   }
   initTheme();
   initMusic();
+  initEagle();
   requestPersistence();
   initGame({
     onChange: scheduleSave,

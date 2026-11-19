@@ -182,3 +182,9 @@ export function initMusic() {
     else audio.pause();
   });
 }
+
+/** Where the menu song is right now (seconds), or null when it is not the menu song or is not sounding. */
+export function menuSongClock(): number | null {
+  if (!audio || audio.paused || current !== MENU_TRACK) return null;
+  return audio.currentTime;
+}

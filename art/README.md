@@ -129,3 +129,16 @@ the dashed start square, the sea and land colours, and the red square under an e
 
 Send the whole `art/` folder. I will wire the files into the game (the map glyphs and the interface
 icons replace the drawn shapes and emoji), regenerate the PNG app icons, and keep it light.
+
+## The menu eagle (`menu/`)
+
+An eagle flies across the main-menu background in time with the eagle cry in the menu song (at 0:18, 0:32,
+1:04 and 1:37; each cry has a 50% chance, set in `src/eagle.ts`). Three wing positions are swapped to flap:
+`eagle-1` (wings fully out), `eagle-2` (half), `eagle-3` (wings up). Draw it seen from above, flying to the
+**right**, 128×64 viewBox; the game rotates and moves it. Keep your own colours (a soft shadow is added).
+
+| File | Size | Used for |
+|---|---|---|
+| `menu/eagle-1.svg` | 128×64 | Eagle, wings fully out. |
+| `menu/eagle-2.svg` | 128×64 | Eagle, wings half. |
+| `menu/eagle-3.svg` | 128×64 | Eagle, wings up. |
