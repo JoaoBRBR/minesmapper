@@ -102,6 +102,8 @@ const blend = (a: RGB, b: RGB, t: number): RGB => [mixc(a[0], b[0], t), mixc(a[1
 
 let CLEAR: string[] = [];
 let PAPER: string[] = [];
+/** Unexplored ground while the map moves in map view: the paper darkened to what the grain and stain average out to. */
+let PAPER_MOVING: string[] = [];
 let REVIEW: string[] = [];
 let ICE: string[] = [];
 /** Engraved numbers are cut into the ground: a darker shade of the cell's own colour, with a pale lip. */
@@ -165,6 +167,10 @@ function rebuildTone() {
   // Unexplored ground is bare paper: nothing about the terrain leaks through.
   const flat = `rgb(${paper[0]},${paper[1]},${paper[2]})`;
   PAPER = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(flat);
+  // measured: the paper grain makes the unexplored ground this much darker on average
+  const k: RGB = toneName === 'light' ? [0.974, 0.97, 0.963] : toneName === 'dark' ? [0.954, 0.954, 0.952] : [0.96, 0.96, 0.96];
+  const movingPaper = `rgb(${Math.round(paper[0] * k[0])},${Math.round(paper[1] * k[1])},${Math.round(paper[2] * k[2])})`;
+  PAPER_MOVING = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(movingPaper);
   VOID_PAL = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill('#05071a');
   // Ice: water you can faintly see through. Mostly solid blue, with just a hint of glaze.
   ICE = bake((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
@@ -204,11 +210,12 @@ export type ViewMode = 'play' | 'review' | 'preview' | 'progress';
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
   if (b === ST_SEA) return simpleColors && view === 'play' ? SIMPLE : CLEAR;
-  if (b === ST_VOID) return spaceMode ? VOID_PAL : view === 'review' ? CLEAR : PAPER;
+  const paper = fakeVintage && view === 'play' ? PAPER_MOVING : PAPER;
+  if (b === ST_VOID) return spaceMode ? VOID_PAL : view === 'review' ? CLEAR : paper;
   const state = b & ST_MASK;
   if (state === ST_REVEALED) return simpleColors && view === 'play' ? SIMPLE : CLEAR;
   if (view === 'play' && (state === 0 || state === ST_FLAG) && b & ST_ICE) return ICE;
-  return view === 'review' ? REVIEW : PAPER;
+  return view === 'review' ? REVIEW : paper;
 }
 /** Progress view colours: found is green, not found is dark, and the sea is darker still. */
 function progressFill(b: number): string {
@@ -322,6 +329,8 @@ function blitLayer(ctx: CanvasRenderingContext2D, l: PixelLayer, dx: number, dy:
  * the stain along the frontier) are left out, and come back when it settles.
  */
 let fastDraw = false;
+/** This frame skips the grain but the vintage look is on: paint the paper in its averaged, darker tone. */
+let fakeVintage = false;
 export const setFastDraw = (on: boolean) => void (fastDraw = on);
 
 export function draw(
@@ -335,6 +344,7 @@ export function draw(
 ) {
   setSpaceTone(world.is_space());
   const { zoom } = cam;
+  fakeVintage = fastDraw && zoom < detailZoom() && vintageParts().grain;
   const x0 = Math.floor(cam.cx - w / 2 / zoom);
   const y0 = Math.floor(cam.cy - h / 2 / zoom);
   const cols = Math.ceil(w / zoom) + 2;
