@@ -1,3 +1,5 @@
+import { settings } from './settings';
+
 // Debug mode: a hidden switch for testing. Press Ctrl+Alt+Shift+D to turn it on or off.
 // It unlocks every level and the Space realm, allows the 3D view on every island, and shows a
 // live panel (fps, frame times, camera, world) on the screen. It is not in any menu or setting.
@@ -13,9 +15,22 @@ const listeners: Array<(on: boolean) => void> = [];
 
 export const isDebug = () => on;
 
-/** Test switch (Ctrl+Alt+Shift+V): hides the vintage look (paper grain, frontier stain, aged page edge). */
-let vintageOff = false;
-export const isVintageOff = () => vintageOff;
+/**
+ * Test switch (Ctrl+Alt+Shift+V, debug mode): cycles which parts of the vintage look are hidden, to
+ * find which one costs the most: 0 all shown, 1 no page edge, 2 no paper grain, 3 no frontier stain, 4 none.
+ */
+let vintagePart = 0;
+const PART_NAMES = ['all vintage parts on', 'page edge OFF', 'paper grain OFF', 'frontier stain OFF', 'ALL vintage parts OFF'];
+export const vintageParts = () => ({
+  edge: settings.vintage && vintagePart !== 1 && vintagePart !== 4,
+  grain: settings.vintage && vintagePart !== 2 && vintagePart !== 4,
+  stain: settings.vintage && vintagePart !== 3 && vintagePart !== 4,
+});
+/** Changes whenever the look does (cheap to compare each frame). */
+export const vintageKey = () => {
+  const v = vintageParts();
+  return (v.edge ? 1 : 0) | (v.grain ? 2 : 0) | (v.stain ? 4 : 0);
+};
 export const onDebugChange = (fn: (on: boolean) => void) => listeners.push(fn);
 
 // --- frame statistics ----------------------------------------------------------------
@@ -83,7 +98,7 @@ function paint() {
     `DEBUG  ${fps.toFixed(0)} fps · ${avg.toFixed(1)} ms (worst ${max.toFixed(0)})`,
     `redraw ${renderMsLast.toFixed(1)} ms · ${rendersPerSec.toFixed(0)}/s · long frames ${longFrames}`,
     ...(mem ? [`JS heap ${(mem.usedJSHeapSize / 1048576).toFixed(0)} MB`] : []),
-    `${innerWidth}×${innerHeight} @${devicePixelRatio}x${vintageOff ? ' · VINTAGE OFF' : ''}`,
+    `${innerWidth}×${innerHeight} @${devicePixelRatio}x${vintagePart ? ' · ' + PART_NAMES[vintagePart] : ''}`,
     ...extra(),
   ];
   panel.textContent = lines.join('\n');
@@ -105,10 +120,7 @@ export function setDebug(next: boolean) {
     /* ignore */
   }
   document.body.classList.toggle('debug', next);
-  if (!next && vintageOff) {
-    vintageOff = false;
-    document.body.classList.remove('novintage');
-  }
+  if (!next) vintagePart = 0;
   if (next) {
     ensurePanel().hidden = false;
     winStart = 0;
@@ -123,9 +135,8 @@ export function initDebug(notify: (msg: string) => void) {
   window.addEventListener('keydown', (e) => {
     if (on && e.ctrlKey && e.altKey && e.shiftKey && e.code === 'KeyV') {
       e.preventDefault();
-      vintageOff = !vintageOff;
-      document.body.classList.toggle('novintage', vintageOff);
-      notify(vintageOff ? '🛠 Vintage look OFF (grain, stain, page edge)' : '🛠 Vintage look on');
+      vintagePart = (vintagePart + 1) % PART_NAMES.length;
+      notify(`🛠 Vintage: ${PART_NAMES[vintagePart]}`);
       return;
     }
     if (!(e.ctrlKey && e.altKey && e.shiftKey && e.code === 'KeyD')) return;

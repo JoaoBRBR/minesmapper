@@ -1,5 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
-import { isVintageOff } from './debug';
+import { vintageParts } from './debug';
 import type { NumberStyle } from './settings';
 import { drawGlyph } from './icons';
 
@@ -385,9 +385,10 @@ export function draw(
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
-    if (!fastDraw && !isVintageOff()) {
-      drawPaperGrain(ctx, cam, w, h);
-      if (edges) drawFrontierStain(ctx, edges.found, zoom);
+    if (!fastDraw) {
+      const v = vintageParts();
+      if (v.grain) drawPaperGrain(ctx, cam, w, h);
+      if (v.stain && edges) drawFrontierStain(ctx, edges.found, zoom);
     }
     if (found) {
       blitLayer(ctx, found, dx, dy, cols * zoom, rows * zoom);

@@ -12,6 +12,7 @@ export interface Settings {
   /** Darker parchment for night play. */
   darkPaper: boolean;
   simpleColors: boolean;
+  vintage: boolean;
   /** How the numbers on the map look. */
   numberStyle: NumberStyle;
   /** Background music on/off, its volume (0 to 1) and whether a track repeats instead of moving on. */
@@ -27,7 +28,7 @@ export interface Settings {
 }
 
 const KEY = 'minefield.settings';
-const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, simpleColors: false, numberStyle: 'engraved', music: true, musicVolume: 0.25, musicRepeat: true, waves: true, keyboardMove: true, modeSwitch: true };
+const DEFAULTS: Settings = { animations: true, sound: true, vibration: true, chunkBorders: false, darkPaper: false, simpleColors: false, vintage: true, numberStyle: 'engraved', music: true, musicVolume: 0.25, musicRepeat: true, waves: true, keyboardMove: true, modeSwitch: true };
 
 function load(): Settings {
   try {
@@ -38,6 +39,7 @@ function load(): Settings {
       vibration: typeof raw.vibration === 'boolean' ? raw.vibration : DEFAULTS.vibration,
       chunkBorders: typeof raw.chunkBorders === 'boolean' ? raw.chunkBorders : DEFAULTS.chunkBorders,
       darkPaper: typeof raw.darkPaper === 'boolean' ? raw.darkPaper : DEFAULTS.darkPaper,
+      vintage: typeof raw.vintage === 'boolean' ? raw.vintage : DEFAULTS.vintage,
       simpleColors: typeof raw.simpleColors === 'boolean' ? raw.simpleColors : DEFAULTS.simpleColors,
       // Older saves stored a boolean `coloredNumbers`.
       numberStyle: NUMBER_STYLES.includes(raw.numberStyle)

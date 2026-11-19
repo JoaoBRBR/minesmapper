@@ -38,6 +38,7 @@ function apply() {
   setPaperTone(settings.darkPaper);
   setNumberStyle(settings.numberStyle);
   setSimpleColors(settings.simpleColors);
+  document.body.classList.toggle('no-edge', !settings.vintage);
   document.documentElement.dataset.paper = settings.darkPaper ? 'dark' : 'light';
   document
     .querySelector('meta[name="theme-color"]')

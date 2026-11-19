@@ -12,7 +12,7 @@ import { sound } from './sound';
 import { defaultForMap, playTrack, unlockTrack } from './music';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
-import { debugFrame, debugRender, isDebug, isVintageOff, setDebugInfo } from './debug';
+import { debugFrame, debugRender, isDebug, setDebugInfo, vintageKey } from './debug';
 import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -138,7 +138,7 @@ let ripple: Ripple | null = null;
 let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
-let lastVintage = false;
+let lastVintage = -1;
 let lastVisuals = visualsVersion;
 /** Phones and touch screens get a compact top bar; the rest lives in the menu. */
 const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
@@ -532,8 +532,10 @@ function frame(now: number) {
     lastVisuals = visualsVersion;
     invalidate();
   }
-  if (isVintageOff() !== lastVintage) {
-    lastVintage = isVintageOff();
+  const vk = vintageKey();
+  if (vk !== lastVintage) {
+    lastVintage = vk;
+    document.body.classList.toggle('no-edge', !(vk & 1));
     invalidate();
   }
   if (settings.chunkBorders !== lastBorders) {

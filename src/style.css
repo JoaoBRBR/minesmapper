@@ -2055,6 +2055,6 @@ body:not(.debug) .debug-only {
 }
 
 /* debug: vintage look switched off for performance tests */
-body.novintage #vintage {
+body.no-edge #vintage {
   display: none;
 }
