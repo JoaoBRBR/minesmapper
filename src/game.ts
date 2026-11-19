@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { setBackgroundRealm } from './background';
-import { draw, drawChunkBorders, setFastDraw, detailZoom, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, detailZoom, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
 import { tr } from './i18n';
@@ -513,10 +513,6 @@ function updateHud(now: number) {
   updateBanner(now);
 }
 
-let lastCamKey = '';
-let lastMoveAt = 0;
-let wasMoving = false;
-
 function frame(now: number) {
   requestAnimationFrame(frame);
   debugFrame(now);
@@ -541,18 +537,6 @@ function frame(now: number) {
   if (settings.chunkBorders !== lastBorders) {
     lastBorders = settings.chunkBorders;
     invalidate();
-  }
-  // map view (zoomed out): while the map moves, skip the decorative layers; one crisp redraw when it settles
-  const camKey = `${cam.cx.toFixed(3)},${cam.cy.toFixed(3)},${cam.zoom.toFixed(3)}`;
-  if (camKey !== lastCamKey) {
-    lastCamKey = camKey;
-    lastMoveAt = now;
-  }
-  const moving = cam.zoom < detailZoom() && now - lastMoveAt < 160;
-  if (moving !== wasMoving) {
-    wasMoving = moving;
-    setFastDraw(moving);
-    if (!moving) invalidate();
   }
   if (ripple && now > rippleEnd) ripple = null;
   if (endFx && now - endFx.t0 > END_MS) endFx = null;

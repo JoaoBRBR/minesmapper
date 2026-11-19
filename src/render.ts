@@ -353,14 +353,9 @@ function blitLayer(ctx: CanvasRenderingContext2D, l: PixelLayer, dx: number, dy:
   ctx.imageSmoothingEnabled = true;
 }
 
-/**
- * While the map is being dragged or zoomed on a phone, the purely decorative layers (paper grain and
- * the stain along the frontier) are left out, and come back when it settles.
- */
-let fastDraw = false;
-/** This frame skips the grain but the vintage look is on: paint the paper in its averaged, darker tone. */
+
+/** Map view: the real grain is not drawn, so the paper gets its averaged darker tone with a cheap mottling instead. */
 let fakeVintage = false;
-export const setFastDraw = (on: boolean) => void (fastDraw = on);
 
 export function draw(
   ctx: CanvasRenderingContext2D,
@@ -373,7 +368,7 @@ export function draw(
 ) {
   setSpaceTone(world.is_space());
   const { zoom } = cam;
-  fakeVintage = fastDraw && zoom < detailZoom() && vintageParts().grain;
+  fakeVintage = zoom < detailZoom() && vintageParts().grain;
   const x0 = Math.floor(cam.cx - w / 2 / zoom);
   const y0 = Math.floor(cam.cy - h / 2 / zoom);
   const cols = Math.ceil(w / zoom) + 2;
@@ -427,7 +422,7 @@ export function draw(
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
-    if (!(fastDraw && zoom < detailZoom())) {
+    if (zoom >= detailZoom()) {
       const v = vintageParts();
       if (v.grain) drawPaperGrain(ctx, cam, w, h);
       if (v.stain && edges) drawFrontierStain(ctx, edges.found, zoom);
