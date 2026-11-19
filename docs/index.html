@@ -15,9 +15,9 @@
     />
     <meta name="theme-color" content="#e3d2a4" />
     <title>Mine's Mapper — a cartographer's minefield</title>
-    <script type="module" crossorigin src="./assets/index-Cp0zXVOt.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/render-Bh3h91EG.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-BaprCxm4.css">
+    <script type="module" crossorigin src="./assets/index-Eilk-YV4.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/render-xph6hnam.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-Duy507qQ.css">
   </head>
   <body>
     <canvas id="bg" hidden aria-hidden="true"></canvas>
@@ -32,8 +32,7 @@
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
-      <button id="home" class="hud-extra" title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
-      <span class="chip hud-extra" id="pos">0, 0</span>
+      <button id="home" class="hud-extra" hidden title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
         <span class="ico">☰</span><span class="lbl"> Menu</span>
       </button>
@@ -118,14 +117,6 @@
           <b id="pause-name"></b>
           <button id="p-resume" aria-label="Close menu">✕</button>
         </div>
-        <div class="menu-info desk-only" id="menu-pos"></div>
-        <div class="seg desk-only" id="m-mode">
-          <button type="button" data-v="reveal">⛏ Reveal</button>
-          <button type="button" data-v="flag">🚩 Flag</button>
-          <button type="button" data-v="neg" hidden>🏴 Negative</button>
-        </div>
-        <button id="m-center" class="desk-only">⌖ Center on the start</button>
-        <button id="m-progress" class="desk-only">📊 View progress</button>
         <button id="m-3d" class="desk-only" hidden>🌍 View the island in 3D</button>
         <div class="touch-menu mobile-only">
           <div class="quick-row">
@@ -136,6 +127,18 @@
           <label class="switch">
             <b>Show borders</b>
             <input type="checkbox" data-setting="chunkBorders" />
+          </label>
+          <label class="switch">
+            <b>Map drawings</b>
+            <input type="checkbox" data-setting="mapDrawings" />
+          </label>
+          <label class="switch">
+            <b>Vintage look</b>
+            <input type="checkbox" data-setting="vintage" />
+          </label>
+          <label class="switch">
+            <b>Simple colors</b>
+            <input type="checkbox" data-setting="simpleColors" />
           </label>
           <label class="dm-row">
             <b>Dark paper</b>
@@ -162,7 +165,7 @@
           <b>Sound effects</b>
           <input type="checkbox" id="m-sound" data-setting="sound" />
         </label>
-        <label class="switch">
+        <label class="switch" id="m-vibration-row">
           <b>Vibration</b>
           <input type="checkbox" id="m-vibration" data-setting="vibration" />
         </label>
@@ -184,14 +187,25 @@
           <b>Dark paper</b>
           <input type="checkbox" id="m-darkPaper" data-setting="darkPaper" />
         </label>
+        <label class="switch">
+          <b>Map drawings</b>
+          <input type="checkbox" id="m-mapDrawings" data-setting="mapDrawings" />
+        </label>
+        <label class="switch">
+          <b>Vintage look</b>
+          <input type="checkbox" id="m-vintage" data-setting="vintage" />
+        </label>
+        <label class="switch">
+          <b>Simple colors</b>
+          <input type="checkbox" id="m-simpleColors" data-setting="simpleColors" />
+        </label>
         <div class="switch choice-row">
           <b>Numbers</b>
           <div class="seg" data-setting-choice="numberStyle" id="s-numberStyle">
             <button type="button" data-v="engraved">Engraved</button>
-            <button type="button" data-v="handwritten">Written</button>
             <button type="button" data-v="colored">Colored</button>
           </div>
-          <small>Engraved like a printed map, hand-written, or the classic colours.</small>
+          <small>Engraved like a printed map, or the classic colours.</small>
         </div>
         <label class="switch">
           <b>Show chunk borders</b>
@@ -224,7 +238,7 @@
           <input type="checkbox" id="s-modeSwitch" data-setting="modeSwitch" />
           <small>Phones: the floating switch that changes between revealing and flagging. Turn it off if you prefer pressing and holding to flag.</small>
         </label>
-        <label class="switch">
+        <label class="switch desk-only">
           <b>Keyboard movement</b>
           <input type="checkbox" id="s-keyboardMove" data-setting="keyboardMove" />
           <small>Desktop: arrow keys or WASD pan the map. Space reveals under the cursor, F flags it, M switches mode, P shows progress, +/- zoom.</small>
@@ -259,11 +273,25 @@
           <input type="checkbox" id="s-darkPaper" data-setting="darkPaper" />
           <small>A darker parchment, easier on the eyes at night.</small>
         </label>
+        <label class="switch">
+          <b>Map drawings</b>
+          <input type="checkbox" id="s-mapDrawings" data-setting="mapDrawings" />
+          <small>Little waves drawn on the sea of the map when you zoom out.</small>
+        </label>
+        <label class="switch">
+          <b>Vintage look</b>
+          <input type="checkbox" id="s-vintage" data-setting="vintage" />
+          <small>Paper texture, the aged page edge and the shadow around unexplored land. Turn it off for a smoother map on slower phones.</small>
+        </label>
+        <label class="switch">
+          <b>Simple colors</b>
+          <input type="checkbox" id="s-simpleColors" data-setting="simpleColors" />
+          <small>While playing, every opened square is one plain colour instead of the biome colours.</small>
+        </label>
         <div class="switch choice-row">
           <b>Numbers</b>
           <div class="seg" data-setting-choice="numberStyle" id="m-numberStyle">
             <button type="button" data-v="engraved">Engraved</button>
-            <button type="button" data-v="handwritten">Written</button>
             <button type="button" data-v="colored">Colored</button>
           </div>
         </div>
@@ -456,13 +484,13 @@
               <button type="button" data-v="easy">Easy</button>
               <button type="button" data-v="normal">Normal</button>
               <button type="button" data-v="hard">Hard</button>
-              <button type="button" data-v="custom">Custom</button>
+              <button type="button" data-v="custom" class="debug-only">Custom</button>
             </div>
-            <label class="slider">
+            <label class="slider debug-only">
               <span>Mines near the center <b id="c-d0-val"></b></span>
               <input type="range" id="c-d0" min="5" max="35" />
             </label>
-            <label class="slider">
+            <label class="slider debug-only">
               <span id="c-d1-label">Mines far away <b id="c-d1-val"></b></span>
               <input type="range" id="c-d1" min="5" max="45" />
             </label>
