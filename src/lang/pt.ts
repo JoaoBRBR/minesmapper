@@ -160,6 +160,8 @@ export const PT: Record<string, string> = {
   '⌖ Center on the start': '⌖ Centralizar no início',
   '🌍 View the island in 3D': '🌍 Ver a ilha em 3D',
   'Show borders': 'Mostrar bordas',
+  'Simple colors': 'Cores simples',
+  'While playing, every opened square is one plain colour instead of the biome colours.': 'Durante o jogo, toda casa aberta fica de uma cor só, em vez das cores dos biomas.',
   'Dark paper': 'Papel escuro',
   '⚙ Advanced': '⚙ Avançado',
   '← Back to menu': '← Voltar ao menu',

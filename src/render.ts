@@ -102,6 +102,11 @@ let ICE: string[] = [];
 /** Engraved numbers are cut into the ground: a darker shade of the cell's own colour, with a pale lip. */
 let ENGRAVE_DARK: string[] = [];
 let ENGRAVE_LIGHT: string[] = [];
+/** "Simple colors": while playing, everything you have opened is one plain colour. */
+let simpleColors = false;
+let SIMPLE: string[] = [];
+let SIMPLE_INK = '#3a2f22';
+let SIMPLE_LIP = 'rgba(255,255,255,0.7)';
 let paperTexture: HTMLCanvasElement | null = null;
 let numberStyle: NumberStyle = 'engraved';
 /** Bumped whenever the look changes, so the game knows to redraw. */
@@ -158,10 +163,23 @@ function rebuildTone() {
   VOID_PAL = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill('#05071a');
   // Ice: water you can faintly see through. Mostly solid blue, with just a hint of glaze.
   ICE = bake((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
+  // One flat colour: pale on the light paper, dark on the dark paper, always clearly apart from
+  // the unexplored ground (and the numbers get the opposite lightness so they stay readable).
+  const plain: RGB = toneName === 'light' ? [247, 248, 242] : toneName === 'dark' ? [30, 29, 28] : [56, 64, 104];
+  SIMPLE = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(`rgb(${plain[0]},${plain[1]},${plain[2]})`);
+  SIMPLE_INK = toneName === 'light' ? '#3a2f22' : '#ece6d6';
+  SIMPLE_LIP = toneName === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.65)';
   paperTexture = null;
   bumpVisuals();
 }
 setPaperTone(false);
+
+/** Turns the one-colour view on or off (it only affects the play view, not the end-of-game review). */
+export function setSimpleColors(on: boolean) {
+  if (on === simpleColors) return;
+  simpleColors = on;
+  bumpVisuals();
+}
 
 /** Engraved (default), hand-written or classic coloured numbers. */
 export function setNumberStyle(style: NumberStyle) {
@@ -180,10 +198,10 @@ export type ViewMode = 'play' | 'review' | 'preview' | 'progress';
 
 function paletteFor(b: number, view: ViewMode): string[] {
   if (view === 'preview') return CLEAR;
-  if (b === ST_SEA) return CLEAR;
+  if (b === ST_SEA) return simpleColors && view === 'play' ? SIMPLE : CLEAR;
   if (b === ST_VOID) return spaceMode ? VOID_PAL : view === 'review' ? CLEAR : PAPER;
   const state = b & ST_MASK;
-  if (state === ST_REVEALED) return CLEAR;
+  if (state === ST_REVEALED) return simpleColors && view === 'play' ? SIMPLE : CLEAR;
   if (view === 'play' && (state === 0 || state === ST_FLAG) && b & ST_ICE) return ICE;
   return view === 'review' ? REVIEW : PAPER;
 }
@@ -377,9 +395,10 @@ export function draw(
               // Engraved into the ground: the cell's own colour, darker, with a pale lip along the
               // lower edge, perfectly upright like a stamped map.
               const pi = paletteIndex(data[k + 1], data[k + 2]);
-              ctx.fillStyle = neg ? '#e6cdfb' : ENGRAVE_LIGHT[pi];
+              const plainView = simpleColors && view === 'play';
+              ctx.fillStyle = neg ? '#e6cdfb' : plainView ? SIMPLE_LIP : ENGRAVE_LIGHT[pi];
               ctx.fillText(text, mx + zoom * 0.03, my + zoom * 0.055);
-              ctx.fillStyle = neg ? '#5b1c99' : ENGRAVE_DARK[pi];
+              ctx.fillStyle = neg ? (plainView && toneName !== 'light' ? '#c58bf2' : '#5b1c99') : plainView ? SIMPLE_INK : ENGRAVE_DARK[pi];
               ctx.fillText(text, mx, my + zoom * 0.02);
             } else {
               // Written by hand: a touch of tilt and wobble that is stable per cell.

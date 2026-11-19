@@ -1,6 +1,6 @@
 // Applies the look-and-feel settings (paper tone, number style) to the canvas and the page.
 
-import { bumpVisuals, setNumberStyle, setPaperTone } from './render';
+import { bumpVisuals, setNumberStyle, setPaperTone, setSimpleColors } from './render';
 import { onSettingsChange, settings } from './settings';
 
 /**
@@ -37,6 +37,7 @@ function apply() {
   document.documentElement.style.setProperty('--grain', settings.darkPaper ? grainDark : grainLight);
   setPaperTone(settings.darkPaper);
   setNumberStyle(settings.numberStyle);
+  setSimpleColors(settings.simpleColors);
   document.documentElement.dataset.paper = settings.darkPaper ? 'dark' : 'light';
   document
     .querySelector('meta[name="theme-color"]')
