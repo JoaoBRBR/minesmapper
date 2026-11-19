@@ -446,6 +446,8 @@ export function draw(
     }
   }
 
+  if (view === 'play' && !spaceMode && zoom < detailZoom() && world.is_island()) drawSeaWaves(ctx, data, cols, rows, x0, y0, cam, w, h);
+
   if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
 
   // Pass 2: grid lines, only around cells that are still part of the puzzle (not water, not tidied).
@@ -940,6 +942,61 @@ function makePaperTexture(dark: boolean): HTMLCanvasElement {
 }
 
 /** Paper grain over the whole map, anchored to the map so it slides with panning. */
+
+/**
+ * Old-chart waves: a few little ink strokes scattered over the open sea outside an island, always the same
+ * size on screen. They are placed on a jittered grid of world blocks (so they stay put while you pan), and
+ * the blocks get bigger as you zoom out so the number on screen stays about the same.
+ */
+function drawSeaWaves(
+  ctx: CanvasRenderingContext2D,
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  x0: number,
+  y0: number,
+  cam: Camera,
+  w: number,
+  h: number,
+) {
+  const zoom = cam.zoom;
+  const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(80 / zoom)))); // cells per block side
+  const bx0 = Math.floor(x0 / block) - 1;
+  const bx1 = Math.floor((x0 + cols) / block) + 1;
+  const by0 = Math.floor(y0 / block) - 1;
+  const by1 = Math.floor((y0 + rows) / block) + 1;
+  const path = new Path2D();
+  for (let by = by0; by <= by1; by++) {
+    for (let bx = bx0; bx <= bx1; bx++) {
+      const hA = hash2(bx * 7 + block, by * 13 + 3);
+      if (hA > 0.7) continue; // not every block gets one
+      const wx = (bx + 0.15 + 0.7 * hash2(bx + 11, by + 5)) * block;
+      const wy = (by + 0.15 + 0.7 * hash2(bx + 29, by + 17)) * block;
+      const c = Math.floor(wx) - x0;
+      const r = Math.floor(wy) - y0;
+      if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+      if (data[(r * cols + c) * 3] !== ST_VOID) continue;
+      const sx = (wx - cam.cx) * zoom + w / 2;
+      const sy = (wy - cam.cy) * zoom + h / 2;
+      const kind = Math.floor(hA * 5) % 3; // 0 single, 1 double, 2 triple
+      const line = (ox: number, oy: number, half: number) => {
+        path.moveTo(sx + ox - half, sy + oy);
+        path.quadraticCurveTo(sx + ox - half / 2, sy + oy - 5, sx + ox, sy + oy);
+        path.quadraticCurveTo(sx + ox + half / 2, sy + oy + 5, sx + ox + half, sy + oy);
+      };
+      line(0, 0, 14);
+      if (kind >= 1) line(7, 9, 10);
+      if (kind === 2) line(-6, 17, 9);
+    }
+  }
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = toneName === 'dark' ? 'rgba(160, 190, 215, 0.42)' : 'rgba(64, 92, 122, 0.5)';
+  ctx.stroke(path);
+  ctx.restore();
+}
+
 /** The zoom at which the grain tile is drawn at its natural size. */
 const GRAIN_REF_ZOOM = 32;
 
