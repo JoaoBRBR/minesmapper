@@ -940,16 +940,31 @@ function makePaperTexture(dark: boolean): HTMLCanvasElement {
 }
 
 /** Paper grain over the whole map, anchored to the map so it slides with panning. */
+/** The zoom at which the grain tile is drawn at its natural size. */
+const GRAIN_REF_ZOOM = 32;
+
+/**
+ * The paper grain belongs to the ground, so it grows and shrinks with the map. To keep fine detail at
+ * every zoom, two copies one octave apart are cross-faded: while zooming in, the finer one fades in as the
+ * coarser one fades out (and the other way round zooming out), like mip levels.
+ */
 function drawPaperGrain(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number) {
   paperTexture ??= makePaperTexture(toneName !== 'light');
-  // The texture repeats and slides with the map. Stamping whole tiles at whole-pixel positions is far
-  // cheaper than a repeating pattern fill with a transform over the entire screen.
-  const t = TEX;
-  const ox = Math.round(w / 2 - cam.cx * cam.zoom);
-  const oy = Math.round(h / 2 - cam.cy * cam.zoom);
-  const sx = ((ox % t) + t) % t;
-  const sy = ((oy % t) + t) % t;
-  for (let y = sy - t; y < h; y += t) {
-    for (let x = sx - t; x < w; x += t) ctx.drawImage(paperTexture, x, y);
-  }
+  const L = Math.log2(cam.zoom / GRAIN_REF_ZOOM);
+  const sA = Math.pow(2, L - Math.floor(L)); // 1 .. 2: scale of the coarser layer
+  const originX = w / 2 - cam.cx * cam.zoom;
+  const originY = h / 2 - cam.cy * cam.zoom;
+  const stamp = (scale: number, alpha: number) => {
+    if (alpha < 0.02) return;
+    const size = TEX * scale;
+    const sx = (((originX % size) + size) % size) - size;
+    const sy = (((originY % size) + size) % size) - size;
+    ctx.globalAlpha = alpha;
+    for (let y = sy; y < h; y += size) {
+      for (let x = sx; x < w; x += size) ctx.drawImage(paperTexture!, x, y, size + 0.5, size + 0.5);
+    }
+  };
+  stamp(sA, 2 - sA); // coarser: fades out as it approaches double size
+  stamp(sA / 2, sA - 1); // finer: fades in
+  ctx.globalAlpha = 1;
 }
