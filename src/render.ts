@@ -987,7 +987,7 @@ function drawSeaWaves(
   ctx.save();
   ctx.lineWidth = 1.5;
   ctx.lineCap = 'round';
-  ctx.strokeStyle = toneName === 'dark' ? 'rgba(160, 190, 215, 0.42)' : 'rgba(64, 92, 122, 0.5)';
+  ctx.strokeStyle = toneName === 'dark' ? 'rgba(172, 172, 176, 0.6)' : 'rgba(28, 42, 60, 0.82)';
   ctx.stroke(path);
   ctx.restore();
 }
