@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { vintageParts } from './debug';
-import type { NumberStyle } from './settings';
+import { settings, type NumberStyle } from './settings';
 import { drawGlyph } from './icons';
 
 export interface Camera {
@@ -441,7 +441,10 @@ export function draw(
     }
   }
 
-  if (view === 'play' && !spaceMode && zoom < detailZoom() && world.is_island()) drawSeaWaves(ctx, data, cols, rows, x0, y0, cam, w, h);
+  if (view === 'play' && !spaceMode && zoom < detailZoom() && settings.mapDrawings && world.is_island()) {
+    drawSeaWaves(ctx, data, cols, rows, x0, y0, cam, w, h);
+    drawLandDrawings(ctx, data, cols, rows, x0, y0, cam, w, h);
+  }
 
   if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
 
@@ -990,6 +993,106 @@ function drawSeaWaves(
   ctx.strokeStyle = toneName === 'dark' ? 'rgba(172, 172, 176, 0.6)' : 'rgba(28, 42, 60, 0.82)';
   ctx.stroke(path);
   ctx.restore();
+}
+
+/**
+ * Hand-drawn mountains and trees on the unexplored inside of an island, like an old chart. Same idea as the
+ * waves: fixed screen size, anchored to jittered blocks of the world, skipped near anything discovered.
+ */
+function drawLandDrawings(
+  ctx: CanvasRenderingContext2D,
+  data: Uint8Array,
+  cols: number,
+  rows: number,
+  x0: number,
+  y0: number,
+  cam: Camera,
+  w: number,
+  h: number,
+) {
+  const zoom = cam.zoom;
+  const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(54 / zoom))));
+  const margin = Math.max(1, Math.ceil(16 / zoom)); // cells the sprite may spill over
+  const hidden = (c: number, r: number) => {
+    if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
+    const b = data[(r * cols + c) * 3];
+    return b !== ST_VOID && b !== ST_SEA && (b & ST_MASK) !== ST_REVEALED && !isTidy(b);
+  };
+  const path = new Path2D();
+  const bx0 = Math.floor(x0 / block) - 1;
+  const bx1 = Math.floor((x0 + cols) / block) + 1;
+  const by0 = Math.floor(y0 / block) - 1;
+  const by1 = Math.floor((y0 + rows) / block) + 1;
+  for (let by = by0; by <= by1; by++) {
+    for (let bx = bx0; bx <= bx1; bx++) {
+      const hA = hash2(bx * 5 + block + 101, by * 11 + 7);
+      const wx = (bx + 0.2 + 0.6 * hash2(bx + 41, by + 3)) * block;
+      const wy = (by + 0.2 + 0.6 * hash2(bx + 53, by + 19)) * block;
+      const c = Math.floor(wx) - x0;
+      const r = Math.floor(wy) - y0;
+      if (!hidden(c, r) || !hidden(c - margin, r) || !hidden(c + margin, r) || !hidden(c, r - margin) || !hidden(c, r + margin)) continue;
+      const biome = data[(r * cols + c) * 3 + 1];
+      const sx = (wx - cam.cx) * zoom + w / 2;
+      const sy = (wy - cam.cy) * zoom + h / 2;
+      if (biome === 12 || biome === 13) {
+        if (hA > 0.7) continue;
+        mountain(path, sx, sy, hA);
+      } else if (biome === 7 || biome === 8 || biome === 9) {
+        if (hA > 0.55) continue;
+        tree(path, sx, sy, false);
+        if (hA < 0.3) tree(path, sx + 11, sy + 5, false);
+        if (hA < 0.15) tree(path, sx - 10, sy + 6, false);
+      } else if (biome === 10 || biome === 11) {
+        if (hA > 0.5) continue;
+        tree(path, sx, sy, true);
+        if (hA < 0.25) tree(path, sx + 9, sy + 4, true);
+      } else if (biome === 5 || biome === 6) {
+        if (hA > 0.16) continue;
+        tree(path, sx, sy, false);
+      }
+    }
+  }
+  ctx.save();
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = toneName === 'dark' ? 'rgba(186, 182, 172, 0.62)' : 'rgba(66, 44, 22, 0.8)';
+  ctx.stroke(path);
+  ctx.restore();
+}
+
+function mountain(path: Path2D, x: number, y: number, v: number) {
+  const big = 9 + v * 6;
+  // the main peak, a smaller one beside it, and a few hatching strokes on the shaded side
+  path.moveTo(x - big - 3, y + 7);
+  path.lineTo(x - 2, y + 7 - big * 1.9);
+  path.lineTo(x + big + 3, y + 7);
+  path.moveTo(x + big * 0.6, y + 7 - big * 0.7);
+  path.lineTo(x + big + 8, y + 7 - big * 1.1);
+  path.lineTo(x + big + 15, y + 7);
+  path.moveTo(x - 2, y + 7 - big * 1.9);
+  path.lineTo(x + 1, y + 2);
+  path.moveTo(x + 2, y + 5 - big);
+  path.lineTo(x + 5, y + 7);
+  path.moveTo(x - 4, y + 6 - big * 0.6);
+  path.lineTo(x - 1, y + 7);
+}
+
+function tree(path: Path2D, x: number, y: number, pine: boolean) {
+  if (pine) {
+    path.moveTo(x - 4, y + 3);
+    path.lineTo(x, y - 7);
+    path.lineTo(x + 4, y + 3);
+    path.moveTo(x - 3, y - 1);
+    path.lineTo(x + 3, y - 1);
+    path.moveTo(x, y + 3);
+    path.lineTo(x, y + 6);
+  } else {
+    path.moveTo(x + 5, y - 2);
+    path.arc(x, y - 3, 5, 0, Math.PI * 2);
+    path.moveTo(x, y + 2);
+    path.lineTo(x, y + 6);
+  }
 }
 
 /** The zoom at which the grain tile is drawn at its natural size. */

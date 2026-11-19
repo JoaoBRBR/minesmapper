@@ -139,6 +139,7 @@ let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
 let lastVintage = -1;
+let lastDrawings = true;
 let lastVisuals = visualsVersion;
 /** Phones and touch screens get a compact top bar; the rest lives in the menu. */
 const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
@@ -526,6 +527,10 @@ function frame(now: number) {
   }
   if (visualsVersion !== lastVisuals) {
     lastVisuals = visualsVersion;
+    invalidate();
+  }
+  if (settings.mapDrawings !== lastDrawings) {
+    lastDrawings = settings.mapDrawings;
     invalidate();
   }
   const vk = vintageKey();

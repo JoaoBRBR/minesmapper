@@ -163,6 +163,8 @@ export const PT: Record<string, string> = {
   'Zoom in to open squares': 'Aproxime para abrir casas',
   'Simple colors': 'Cores simples',
   'Vintage look': 'Visual vintage',
+  'Map drawings': 'Desenhos no mapa',
+  'Little waves, mountains and trees drawn on the map when you zoom out.': 'Ondas, montanhas e árvores desenhadas no mapa quando você afasta o zoom.',
   'Paper texture, the aged page edge and the shadow around unexplored land. Turn it off for a smoother map on slower phones.': 'Textura de papel, a borda envelhecida da página e a sombra em volta da terra inexplorada. Desligue para um mapa mais fluido em celulares mais lentos.',
   'While playing, every opened square is one plain colour instead of the biome colours.': 'Durante o jogo, toda casa aberta fica de uma cor só, em vez das cores dos biomas.',
   'Dark paper': 'Papel escuro',
