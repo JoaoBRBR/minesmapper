@@ -27,7 +27,7 @@ export function setBackgroundRealm(space: boolean) {
     /* the background just stays as it is */
   }
 }
-const backgroundIsSpace = () => {
+export const backgroundIsSpace = () => {
   try {
     return localStorage.getItem(SPACE_KEY) === '1';
   } catch {

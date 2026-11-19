@@ -2,6 +2,7 @@
 // node so the volume slider also works on iPhone. Nothing is downloaded until a track is played.
 
 import { onSettingsChange, settings, setSetting } from './settings';
+import { backgroundIsSpace } from './background';
 import { MAP_TRACKS, MENU_TRACK, SECRET_TRACK, TRACKS, trackById, type Track } from './tracks';
 
 const files = import.meta.glob('../music/*.m4a', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -106,7 +107,7 @@ export function playTrack(id: string) {
 }
 
 export function playMenuMusic() {
-  playTrack(MENU_TRACK);
+  playTrack(backgroundIsSpace() ? SECRET_TRACK : MENU_TRACK);
 }
 
 function step(dir: 1 | -1) {

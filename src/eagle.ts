@@ -9,7 +9,7 @@ const urls = import.meta.glob('../art/menu/eagle-*.svg', { eager: true, query: '
 /** Seconds into the menu song where the eagle cries. */
 const CRIES = [18, 32, 64, 97];
 const CHANCE = 0.5; // later: make it rare
-const LEAD = 3; // enters the screen this long before the cry
+const LEAD = 5; // enters the screen this long before the cry
 const TAIL = 4.5; // and leaves this long after it
 const FLAP = [0, 1, 2, 1];
 
@@ -68,7 +68,7 @@ function frame() {
 
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const size = Math.max(120, Math.min(260, w * 0.2));
+  const size = Math.max(70, Math.min(150, w * 0.12));
   const p = (t - (CRIES[i] - LEAD)) / (LEAD + TAIL); // 0..1 across the flight
   const reach = Math.hypot(w, h) + size * 2;
   const bob = Math.sin(t * 2.2) * 14;
