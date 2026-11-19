@@ -1011,7 +1011,7 @@ function drawLandDrawings(
   h: number,
 ) {
   const zoom = cam.zoom;
-  const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(54 / zoom))));
+  const block = Math.pow(2, Math.max(0, Math.ceil(Math.log2(62 / zoom))));
   const margin = Math.max(1, Math.ceil(16 / zoom)); // cells the sprite may spill over
   const hidden = (c: number, r: number) => {
     if (c < 0 || r < 0 || c >= cols || r >= rows) return false;
@@ -1038,22 +1038,22 @@ function drawLandDrawings(
         if (hA > 0.7) continue;
         mountain(path, sx, sy, hA);
       } else if (biome === 7 || biome === 8 || biome === 9) {
-        if (hA > 0.55) continue;
+        if (hA > 0.85) continue;
         tree(path, sx, sy, false);
-        if (hA < 0.3) tree(path, sx + 11, sy + 5, false);
-        if (hA < 0.15) tree(path, sx - 10, sy + 6, false);
+        if (hA < 0.55) tree(path, sx + 11, sy + 5, false);
+        if (hA < 0.3) tree(path, sx - 10, sy + 6, false);
       } else if (biome === 10 || biome === 11) {
-        if (hA > 0.5) continue;
+        if (hA > 0.8) continue;
         tree(path, sx, sy, true);
-        if (hA < 0.25) tree(path, sx + 9, sy + 4, true);
+        if (hA < 0.45) tree(path, sx + 9, sy + 4, true);
       } else if (biome === 5 || biome === 6) {
-        if (hA > 0.16) continue;
+        if (hA > 0.4) continue;
         tree(path, sx, sy, false);
       }
     }
   }
   ctx.save();
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = 1.6;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.strokeStyle = toneName === 'dark' ? 'rgba(186, 182, 172, 0.62)' : 'rgba(66, 44, 22, 0.8)';
@@ -1062,20 +1062,21 @@ function drawLandDrawings(
 }
 
 function mountain(path: Path2D, x: number, y: number, v: number) {
-  const big = 9 + v * 6;
+  const k = 1.55; // drawn larger than the trees
+  const big = (9 + v * 6) * k;
   // the main peak, a smaller one beside it, and a few hatching strokes on the shaded side
-  path.moveTo(x - big - 3, y + 7);
-  path.lineTo(x - 2, y + 7 - big * 1.9);
-  path.lineTo(x + big + 3, y + 7);
-  path.moveTo(x + big * 0.6, y + 7 - big * 0.7);
-  path.lineTo(x + big + 8, y + 7 - big * 1.1);
-  path.lineTo(x + big + 15, y + 7);
-  path.moveTo(x - 2, y + 7 - big * 1.9);
-  path.lineTo(x + 1, y + 2);
-  path.moveTo(x + 2, y + 5 - big);
-  path.lineTo(x + 5, y + 7);
-  path.moveTo(x - 4, y + 6 - big * 0.6);
-  path.lineTo(x - 1, y + 7);
+  path.moveTo(x - big - 3 * k, y + 7 * k);
+  path.lineTo(x - 2 * k, y + 7 * k - big * 1.9);
+  path.lineTo(x + big + 3 * k, y + 7 * k);
+  path.moveTo(x + big * 0.6, y + 7 * k - big * 0.7);
+  path.lineTo(x + big + 8 * k, y + 7 * k - big * 1.1);
+  path.lineTo(x + big + 15 * k, y + 7 * k);
+  path.moveTo(x - 2 * k, y + 7 * k - big * 1.9);
+  path.lineTo(x + 1 * k, y + 2 * k);
+  path.moveTo(x + 2 * k, y + 5 * k - big);
+  path.lineTo(x + 5 * k, y + 7 * k);
+  path.moveTo(x - 4 * k, y + 6 * k - big * 0.6);
+  path.lineTo(x - 1 * k, y + 7 * k);
 }
 
 function tree(path: Path2D, x: number, y: number, pine: boolean) {
