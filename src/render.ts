@@ -275,6 +275,35 @@ export function screenToCell(cam: Camera, w: number, h: number, px: number, py: 
 // --- Low zoom: the cells are painted as one small image instead of one rectangle each ---------------
 // Below this zoom there are thousands of tiny cells, and a fillRect per cell is what made zooming out
 // slow. Instead each cell becomes one pixel of a cols x rows image that is drawn scaled up in a single call.
+/** Soft, blotchy variation per cell (two octaves of value noise), a cheap stand-in for the paper grain. */
+const hash2 = (x: number, y: number) => {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+function valueNoise(x: number, y: number) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy);
+  const b = hash2(ix + 1, iy);
+  const c = hash2(ix, iy + 1);
+  const d = hash2(ix + 1, iy + 1);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+}
+const paperMottle = (wx: number, wy: number) => {
+  const n = valueNoise(wx / 7, wy / 7) * 0.65 + valueNoise(wx / 2.6 + 50, wy / 2.6 + 50) * 0.35;
+  return 1 + (n - 0.5) * 0.09; // about +-4.5%, centred on 1 so the average tone stays put
+};
+function scaleU32(c: number, f: number): number {
+  const r = Math.min(255, (c & 255) * f);
+  const g = Math.min(255, ((c >>> 8) & 255) * f);
+  const b = Math.min(255, ((c >>> 16) & 255) * f);
+  return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
 const u32Cache = new WeakMap<string[], Uint32Array>();
 const colourU32 = new Map<string, number>();
 function toU32(css: string): number {
@@ -378,7 +407,9 @@ export function draw(
         lastPal = p;
         lastU32 = paletteU32(p);
       }
-      out[i] = lastU32[paletteIndex(data[k + 1], data[k + 2])];
+      let col = lastU32[paletteIndex(data[k + 1], data[k + 2])];
+      if (p === PAPER_MOVING) col = scaleU32(col, paperMottle(x0 + (i % cols), y0 + Math.floor(i / cols)));
+      out[i] = col;
       if (out2) out2[i] = isFoundCell(b) || b === ST_SEA ? out[i] : 0;
     }
     blitLayer(ctx, base, dx, dy, cols * zoom, rows * zoom);
