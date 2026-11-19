@@ -171,7 +171,7 @@ function rebuildTone() {
   const k: RGB = toneName === 'light' ? [0.974, 0.97, 0.963] : toneName === 'dark' ? [0.954, 0.954, 0.952] : [0.96, 0.96, 0.96];
   const movingPaper = `rgb(${Math.round(paper[0] * k[0])},${Math.round(paper[1] * k[1])},${Math.round(paper[2] * k[2])})`;
   PAPER_MOVING = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill(movingPaper);
-  VOID_PAL = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill('#05071a');
+  VOID_PAL = new Array(BIOME_COLORS.length * SHADE_LEVELS).fill('rgb(5,8,28)');
   // Ice: water you can faintly see through. Mostly solid blue, with just a hint of glaze.
   ICE = bake((base, f) => blend(blend(lit(base, f), [140, 196, 228], 0.2), paper, 0.08));
   // One flat colour: pale on the light paper, dark on the dark paper, always clearly apart from
