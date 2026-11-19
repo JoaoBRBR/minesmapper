@@ -156,6 +156,7 @@ export function initGame(callbacks: GameCallbacks) {
     if (!active || !world) return ['(no map open)'];
     const c = '';
     return [
+      `seed ${cfg?.seedText ?? '?'} (${cfg?.seed ?? '?'}) · ${cfg?.mode ?? ''} ${cfg?.size ?? ''}`,
       `cam ${cam.cx.toFixed(1)}, ${cam.cy.toFixed(1)} · zoom ${cam.zoom.toFixed(1)}`,
       `score ${world.score()} · hearts lost ${world.mistakes()}${level ? ` · ${level.id}` : ''}${c ? ` · ${c}` : ''}`,
       `${world.is_island() ? 'island' : 'endless'}${world.is_space() ? ' · space' : ''}`,

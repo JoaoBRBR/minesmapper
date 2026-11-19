@@ -607,6 +607,10 @@ impl World {
                 self.clean_chunks.insert(k);
             }
         }
+        let flagged_chunks: HashSet<(i32, i32)> = self.flagged.iter().map(|&(x, y)| clean_key(x, y)).collect();
+        for k in flagged_chunks {
+            self.refresh_mine_only_chunk(k);
+        }
         self.powerups_found = self.collected.iter().filter(|&&(x, y)| self.is_powerup(x, y)).count() as u32;
         for (x, y) in revealed {
             let d = dist_from_origin(x, y);
@@ -725,6 +729,37 @@ impl World {
             (0, false, false)
         } else {
             (sum.unsigned_abs() as u8, sum < 0, sum == 0)
+        }
+    }
+
+    /// A chunk whose playable cells are all mines has nothing to reveal, so it can never complete by
+    /// revealing. It counts as clean once every one of its mines carries the right flag (and stops
+    /// counting if one is taken away), so the ground around it can tidy up like everywhere else.
+    fn refresh_mine_only_chunk(&mut self, k: (i32, i32)) {
+        let mut any = false;
+        let mut all_flagged = true;
+        for y in k.1 * CLEAN_CHUNK..(k.1 + 1) * CLEAN_CHUNK {
+            for x in k.0 * CLEAN_CHUNK..(k.0 + 1) * CLEAN_CHUNK {
+                if !self.is_playable(x, y) {
+                    continue;
+                }
+                if !self.is_mine(x, y) {
+                    return; // a chunk with safe cells completes by revealing them
+                }
+                any = true;
+                let right_flag = self.flagged.contains(&(x, y)) && self.neg_flags.contains(&(x, y)) == self.is_negative(x, y);
+                all_flagged &= right_flag;
+            }
+        }
+        if !any {
+            return;
+        }
+        if all_flagged {
+            if self.clean_chunks.insert(k) {
+                self.clean_log.extend([k.0, k.1]);
+            }
+        } else {
+            self.clean_chunks.remove(&k);
         }
     }
 
@@ -880,6 +915,7 @@ impl World {
                 self.neg_flags.remove(&(x, y));
             }
             self.powerups_used += 1;
+            self.refresh_mine_only_chunk(clean_key(x, y));
             2
         } else {
             self.flagged.remove(&(x, y));
@@ -1062,10 +1098,12 @@ impl World {
         let p = (x, y);
         if self.flagged.contains(&p) && !self.neg_flags.contains(&p) {
             self.flagged.remove(&p);
+            self.refresh_mine_only_chunk(clean_key(x, y));
             return false;
         }
         self.flagged.insert(p);
         self.neg_flags.remove(&p);
+        self.refresh_mine_only_chunk(clean_key(x, y));
         true
     }
 
@@ -1080,10 +1118,12 @@ impl World {
         let p = (x, y);
         if self.neg_flags.remove(&p) {
             self.flagged.remove(&p);
+            self.refresh_mine_only_chunk(clean_key(x, y));
             return false;
         }
         self.flagged.insert(p);
         self.neg_flags.insert(p);
+        self.refresh_mine_only_chunk(clean_key(x, y));
         true
     }
 
@@ -1912,6 +1952,49 @@ mod tests {
         let w = World::new_island(5, 192, 0.12, 0.2, 2);
         // Safe cells to clear include any lake cells (they are playable).
         assert_eq!(w.safe_total(), w.land_total() - w.mines_total());
+    }
+
+    #[test]
+    fn a_chunk_of_only_mines_is_clean_once_every_mine_is_flagged() {
+        // find an island with a 16x16 chunk whose playable cells are all mines (a tiny tip of land)
+        let mut found = None;
+        'seeds: for seed in 0..600u32 {
+            let w = World::new_island(seed, 48, 0.15, 0.28, 2);
+            for cy in -2..2 {
+                for cx in -2..2 {
+                    let mut cells = Vec::new();
+                    for y in cy * 16..(cy + 1) * 16 {
+                        for x in cx * 16..(cx + 1) * 16 {
+                            if w.is_playable(x, y) {
+                                cells.push((x, y));
+                            }
+                        }
+                    }
+                    if !cells.is_empty() && cells.iter().all(|&(x, y)| w.is_mine(x, y)) {
+                        found = Some((seed, (cx, cy), cells));
+                        break 'seeds;
+                    }
+                }
+            }
+        }
+        let (seed, k, cells) = found.expect("some island has a mines-only chunk");
+        let mut w = World::new_island(seed, 48, 0.15, 0.28, 2);
+        assert!(!w.clean_chunks.contains(&k));
+        for (i, &(x, y)) in cells.iter().enumerate() {
+            assert!(w.toggle_flag(x, y));
+            assert_eq!(w.clean_chunks.contains(&k), i + 1 == cells.len(), "clean only after the last flag");
+        }
+        // it survives saving and loading
+        let saved = w.export_state();
+        let mut w2 = World::new_island(seed, 48, 0.15, 0.28, 2);
+        assert!(w2.import_state(&saved));
+        assert!(w2.clean_chunks.contains(&k));
+        // taking a flag away (when the cell is not tidied away) makes it unfinished again
+        let (x, y) = cells[0];
+        if w.can_mark(x, y) {
+            assert!(!w.toggle_flag(x, y));
+            assert!(!w.clean_chunks.contains(&k));
+        }
     }
 
     #[test]
