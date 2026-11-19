@@ -29,7 +29,6 @@
       <span class="chip" id="timer" hidden>00:00</span>
       <button id="mode" class="hud-extra" aria-pressed="false">⛏ Reveal</button>
       <button id="progress" class="hud-extra" title="See what you have found so far">📊 Progress</button>
-      <button id="home" class="hud-extra" hidden title="Back to center (C)" aria-label="Back to center">⌖ Center</button>
       <button id="menu" title="Menu (Esc)" aria-label="Menu" aria-haspopup="true">
         <span class="ico">☰</span><span class="lbl"> Menu</span>
       </button>
@@ -42,8 +41,8 @@
 
     <div id="vignette" hidden></div>
 
-    <!-- Phones: shows up when you are far from the start, and takes you back -->
-    <button id="recenter" class="float-btn" hidden aria-label="Back to the start" title="Back to the start">⌖</button>
+    <!-- A compass: shows up when you are far from the start, its red point shows the way, and it takes you back -->
+    <button id="recenter" class="float-btn" hidden aria-label="Back to the start" title="Back to the start (C)"><img class="cmp-ring" src="/art/ui/compass-ring.svg" alt="" /><img id="recenter-needle" class="cmp-needle" src="/art/ui/compass-needle.svg" alt="" /></button>
 
     <!-- Space maps with the switch hidden: picks the kind of flag a long press places -->
     <button id="flag-kind" class="float-btn" hidden aria-label="Kind of flag" title="Normal flag or negative flag">🚩</button>

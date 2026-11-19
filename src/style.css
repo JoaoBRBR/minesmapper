@@ -1650,10 +1650,17 @@ button.small {
   width: 46px;
   height: 46px;
 }
-@media (min-width: 721px) and (not (pointer: coarse)) {
-  #recenter {
-    display: none !important;
-  }
+#recenter {
+  position: fixed;
+  padding: 0;
+}
+#recenter .cmp-ring,
+#recenter .cmp-needle {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  pointer-events: none;
 }
 
 /* ---- Music player: previous / current title / next / repeat ---- */

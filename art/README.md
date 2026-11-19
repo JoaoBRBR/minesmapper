@@ -119,6 +119,8 @@ and only on ground you have not opened yet.
 | `chart/monster-kraken.svg` | 64×64 | Sea monster 2: a kraken (rare, on the open sea). |
 | `chart/ship.svg` | 64×64 | A ship sailing the open sea (rare). |
 | `chart/home.svg` | 64×64 | Home: marks where the island starts. |
+| `ui/compass-ring.svg` | 64×64 | The compass button that takes you back to the start (shown when you are far away): the ring and tick marks. |
+| `ui/compass-needle.svg` | 64×64 | The compass needle, drawn pointing UP; the game rotates it so the red point aims at the start. |
 
 Not in this folder, still drawn by the game: the parchment texture and paper grain, the glowing goal border,
 the dashed start square, the sea and land colours, and the red square under an exploded mine.

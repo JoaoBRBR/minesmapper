@@ -56,7 +56,7 @@ const $vignette = el('vignette');
 const $score = el('score');
 const $timer = el('timer');
 const $mode = el<HTMLButtonElement>('mode');
-const $home = el<HTMLButtonElement>('home');
+const $needle = el<HTMLImageElement>('recenter-needle');
 const $menu = el<HTMLButtonElement>('menu');
 const $oracle = el<HTMLButtonElement>('oracle');
 const $oracleN = el('oracle-n');
@@ -445,12 +445,20 @@ function updateBanner(now: number) {
   $bProgress.hidden = key !== 'lost';
 }
 
+let needleDeg = NaN;
 function updateHud(now: number) {
   const wd = world!;
   // far from the start (two cleanup chunks or more): offer a way back
   const far = Math.hypot(cam.cx - HOME.x, cam.cy - HOME.y) > 32 && !progressView;
   if ($recenter.hidden === far) $recenter.hidden = !far;
-  if ($home.hidden === far) $home.hidden = !far;
+  if (far) {
+    // the red point of the compass aims at the start
+    const deg = Math.round((Math.atan2(HOME.y - cam.cy, HOME.x - cam.cx) * 180) / Math.PI + 90);
+    if (deg !== needleDeg) {
+      needleDeg = deg;
+      $needle.style.transform = `rotate(${deg}deg)`;
+    }
+  }
   const island = wd.is_island();
   const finished = wd.is_game_over() || wd.is_won();
   if (startedAt === null && wd.score() > 0) startedAt = now;
@@ -1320,7 +1328,6 @@ $flagKind.addEventListener('click', () => {
   uiMode = '';
   syncMarkUi();
 });
-$home.addEventListener('click', recenter);
 $recenter.addEventListener('click', recenter);
 $menu.addEventListener('click', () => cb.onMenu());
 $oracle.addEventListener('click', toggleOracleMode);
