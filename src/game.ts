@@ -310,7 +310,8 @@ function invalidate() {
 }
 
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
+  // phones report 3x or more; drawing that many pixels is the main cost there, and 2x still looks sharp
+  const dpr = Math.min(window.devicePixelRatio || 1, compactHud.matches ? 2 : 3);
   w = window.innerWidth;
   h = window.innerHeight;
   canvas.width = Math.round(w * dpr);

@@ -260,6 +260,59 @@ export function screenToCell(cam: Camera, w: number, h: number, px: number, py: 
   return [Math.floor((px - w / 2) / cam.zoom + cam.cx), Math.floor((py - h / 2) / cam.zoom + cam.cy)];
 }
 
+// --- Low zoom: the cells are painted as one small image instead of one rectangle each ---------------
+// Below this zoom there are thousands of tiny cells, and a fillRect per cell is what made zooming out
+// slow. Instead each cell becomes one pixel of a cols x rows image that is drawn scaled up in a single call.
+const PIXEL_PATH_BELOW = 12;
+const u32Cache = new WeakMap<string[], Uint32Array>();
+const colourU32 = new Map<string, number>();
+function toU32(css: string): number {
+  let v = colourU32.get(css);
+  if (v === undefined) {
+    const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(css);
+    const [r, g, b] = m ? [+m[1], +m[2], +m[3]] : [255, 0, 255];
+    v = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; // little-endian RGBA
+    if (colourU32.size < 64) colourU32.set(css, v);
+  }
+  return v;
+}
+function paletteU32(pal: string[]): Uint32Array {
+  let out = u32Cache.get(pal);
+  if (!out) {
+    out = new Uint32Array(pal.length);
+    for (let i = 0; i < pal.length; i++) out[i] = toU32(pal[i]);
+    u32Cache.set(pal, out);
+  }
+  return out;
+}
+interface PixelLayer {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  image: ImageData;
+  u32: Uint32Array;
+}
+const layers: PixelLayer[] = [];
+function layer(i: number, cols: number, rows: number): PixelLayer | null {
+  let l = layers[i];
+  if (!l || l.canvas.width !== cols || l.canvas.height !== rows) {
+    const canvas = l?.canvas ?? document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    const image = c.createImageData(cols, rows);
+    l = { canvas, ctx: c, image, u32: new Uint32Array(image.data.buffer) };
+    layers[i] = l;
+  }
+  return l;
+}
+function blitLayer(ctx: CanvasRenderingContext2D, l: PixelLayer, dx: number, dy: number, dw: number, dh: number) {
+  l.ctx.putImageData(l.image, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(l.canvas, 0, 0, l.canvas.width, l.canvas.height, dx, dy, dw, dh);
+  ctx.imageSmoothingEnabled = true;
+}
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   world: World,
@@ -283,28 +336,57 @@ export function draw(
   const progress = view === 'progress';
   const at = (r: number, c: number) => data[(r * cols + c) * 3];
 
-  // Pass 1: terrain + state tint. Unplayable water is never fogged.
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = (r * cols + c) * 3;
-      ctx.fillStyle = progress ? progressFill(data[i]) : paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
-      ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
+  const usePixels = zoom < PIXEL_PATH_BELOW && !progress;
+  const base = usePixels ? layer(0, cols, rows) : null;
+  const found = usePixels && (view === 'play' || view === 'review') ? layer(1, cols, rows) : null;
+  const edges = view !== 'preview' ? collectEdges(data, cols, rows, x0, y0, px, py) : null;
+  const dx = (x0 - cam.cx) * zoom + w / 2;
+  const dy = (y0 - cam.cy) * zoom + h / 2;
+
+  if (base) {
+    // Pass 1 (one pixel per cell): terrain + state tint. Unplayable water is never fogged.
+    const out = base.u32;
+    const out2 = found?.u32;
+    let lastPal: string[] | null = null;
+    let lastU32 = out; // placeholder until the first cell sets it
+    for (let i = 0, n = cols * rows; i < n; i++) {
+      const k = i * 3;
+      const b = data[k];
+      const p = paletteFor(b, view);
+      if (p !== lastPal) {
+        lastPal = p;
+        lastU32 = paletteU32(p);
+      }
+      out[i] = lastU32[paletteIndex(data[k + 1], data[k + 2])];
+      if (out2) out2[i] = isFoundCell(b) || b === ST_SEA ? out[i] : 0;
+    }
+    blitLayer(ctx, base, dx, dy, cols * zoom, rows * zoom);
+  } else {
+    // Pass 1: terrain + state tint. Unplayable water is never fogged.
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = (r * cols + c) * 3;
+        ctx.fillStyle = progress ? progressFill(data[i]) : paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
+        ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
+      }
     }
   }
-
-  const edges = view !== 'preview' ? collectEdges(data, cols, rows, x0, y0, px, py) : null;
 
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
     drawPaperGrain(ctx, cam, w, h);
     if (edges) drawFrontierStain(ctx, edges.found, zoom);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const i = (r * cols + c) * 3;
-        if (!isFoundCell(data[i]) && data[i] !== ST_SEA) continue;
-        ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
-        ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
+    if (found) {
+      blitLayer(ctx, found, dx, dy, cols * zoom, rows * zoom);
+    } else {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = (r * cols + c) * 3;
+          if (!isFoundCell(data[i]) && data[i] !== ST_SEA) continue;
+          ctx.fillStyle = paletteFor(data[i], view)[paletteIndex(data[i + 1], data[i + 2])];
+          ctx.fillRect(px(x0 + c), py(y0 + r), size, size);
+        }
       }
     }
   }
