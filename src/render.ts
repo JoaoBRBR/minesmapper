@@ -1,4 +1,5 @@
 import type { World } from './wasm/pkg/minefield';
+import { isVintageOff } from './debug';
 import type { NumberStyle } from './settings';
 import { drawGlyph } from './icons';
 
@@ -12,6 +13,8 @@ export interface Camera {
 
 /** Default minimum zoom; island mode may go lower to fit the whole island. */
 export const MIN_ZOOM = 6;
+/** From this zoom the map is playable: numbers, flags and grid appear. Further out it is a plain map view. */
+export const DETAIL_ZOOM = 20;
 export const MAX_ZOOM = 96;
 
 const ST_MASK = 0x30;
@@ -263,7 +266,7 @@ export function screenToCell(cam: Camera, w: number, h: number, px: number, py: 
 // --- Low zoom: the cells are painted as one small image instead of one rectangle each ---------------
 // Below this zoom there are thousands of tiny cells, and a fillRect per cell is what made zooming out
 // slow. Instead each cell becomes one pixel of a cols x rows image that is drawn scaled up in a single call.
-const PIXEL_PATH_BELOW = 12;
+const PIXEL_PATH_BELOW = 20;
 const u32Cache = new WeakMap<string[], Uint32Array>();
 const colourU32 = new Map<string, number>();
 function toU32(css: string): number {
@@ -382,7 +385,7 @@ export function draw(
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
-    if (!fastDraw) {
+    if (!fastDraw && !isVintageOff()) {
       drawPaperGrain(ctx, cam, w, h);
       if (edges) drawFrontierStain(ctx, edges.found, zoom);
     }
@@ -403,7 +406,7 @@ export function draw(
   if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
 
   // Pass 2: grid lines, only around cells that are still part of the puzzle (not water, not tidied).
-  if (zoom >= 14 && !progress) {
+  if (zoom >= DETAIL_ZOOM && !progress) {
     const gridded = (b: number) => !isVoidCell(b) && !isTidy(b);
     ctx.strokeStyle = TONES[toneName].grid;
     ctx.lineWidth = 1;
@@ -438,7 +441,7 @@ export function draw(
   if (progress) return;
 
   // Pass 3: glyphs (numbers, flags, mines).
-  if (zoom >= 8) {
+  if (zoom >= DETAIL_ZOOM) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font =
@@ -466,7 +469,7 @@ export function draw(
           continue;
         }
         if (state === ST_REVEALED) {
-          if (b & ST_POWERUP && zoom >= 12) {
+          if (b & ST_POWERUP && zoom >= DETAIL_ZOOM) {
             // an ice clearer (shade bit 0) is an ice crystal; an oracle is the gold star
             drawPickup(ctx, sx + zoom * 0.7, sy + zoom * 0.3, zoom, (data[k + 2] & 1) === 1);
           }
@@ -475,7 +478,7 @@ export function draw(
           const neg = spaceMode && (data[k + 2] & 2) !== 0;
           const zero = spaceMode && (data[k + 2] & 4) !== 0;
           const text = neg ? `\u2212${n}` : String(n);
-          if ((n > 0 || zero) && zoom >= 12) {
+          if ((n > 0 || zero) && zoom >= DETAIL_ZOOM) {
             if (numberStyle === 'colored') {
               ctx.lineWidth = Math.max(2, zoom * 0.14);
               ctx.strokeStyle = 'rgba(255,255,255,0.85)';

@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { setBackgroundRealm } from './background';
-import { draw, drawChunkBorders, setFastDraw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, setFastDraw, DETAIL_ZOOM, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
 import { tr } from './i18n';
@@ -12,7 +12,7 @@ import { sound } from './sound';
 import { defaultForMap, playTrack, unlockTrack } from './music';
 import { bump, noteDailyWin, noteEndless, noteIslandWin } from './stats';
 import { makeWorld } from './config';
-import { debugFrame, debugRender, isDebug, setDebugInfo } from './debug';
+import { debugFrame, debugRender, isDebug, isVintageOff, setDebugInfo } from './debug';
 import { getLevel, levelNumber, nextLevel, openingView, recordResult, starsFor, startRect, type LevelDef } from './levels';
 import type { CamState, Status, WorldConfig } from './storage';
 
@@ -138,6 +138,7 @@ let ripple: Ripple | null = null;
 let rippleEnd = 0;
 let cleanFx: NonNullable<Fx['cleanups']> = [];
 let lastBorders = settings.chunkBorders;
+let lastVintage = false;
 let lastVisuals = visualsVersion;
 /** Phones and touch screens get a compact top bar; the rest lives in the menu. */
 const compactHud = matchMedia('(max-width: 720px), (pointer: coarse)');
@@ -204,7 +205,7 @@ export function loadWorld(
   glide = null;
   pointers.clear();
   $timer.hidden = config.mode !== 'island' && !level;
-  const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? 14 : 32);
+  const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? DETAIL_ZOOM + 4 : 32);
   const opening = level ? openingView(level) : null;
   cam.cx = saved?.cx ?? opening?.x ?? HOME.x;
   cam.cy = saved?.cy ?? opening?.y ?? HOME.y;
@@ -531,6 +532,10 @@ function frame(now: number) {
     lastVisuals = visualsVersion;
     invalidate();
   }
+  if (isVintageOff() !== lastVintage) {
+    lastVintage = isVintageOff();
+    invalidate();
+  }
   if (settings.chunkBorders !== lastBorders) {
     lastBorders = settings.chunkBorders;
     invalidate();
@@ -796,7 +801,7 @@ function isChordable(x: number, y: number): boolean {
 }
 
 /** Zoomed out further than this the map is for looking at: taps on cells do nothing. */
-const TAP_MIN_ZOOM = 12;
+const TAP_MIN_ZOOM = DETAIL_ZOOM;
 let lastZoomHint = 0;
 function tooFarToPlay(): boolean {
   if (cam.zoom >= TAP_MIN_ZOOM) return false;
@@ -1167,7 +1172,7 @@ function handleTap(px: number, py: number, secondary: boolean) {
 }
 
 function doubleTapZoom(cx: number, cy: number) {
-  const tz = cam.zoom < 36 ? Math.min(60, cam.zoom * 2.2) : Math.max(minZoom(), cam.zoom / 2.4);
+  const tz = cam.zoom < 36 ? Math.min(60, Math.max(DETAIL_ZOOM + 4, cam.zoom * 2.2)) : Math.max(minZoom(), cam.zoom / 2.4);
   glideTo(cx + 0.5, cy + 0.5, tz, 420);
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));

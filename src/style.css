@@ -2053,3 +2053,8 @@ body:not(.debug) .debug-only {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* debug: vintage look switched off for performance tests */
+body.novintage #vintage {
+  display: none;
+}

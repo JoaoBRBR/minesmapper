@@ -12,6 +12,10 @@ try {
 const listeners: Array<(on: boolean) => void> = [];
 
 export const isDebug = () => on;
+
+/** Test switch (Ctrl+Alt+Shift+V): hides the vintage look (paper grain, frontier stain, aged page edge). */
+let vintageOff = false;
+export const isVintageOff = () => vintageOff;
 export const onDebugChange = (fn: (on: boolean) => void) => listeners.push(fn);
 
 // --- frame statistics ----------------------------------------------------------------
@@ -79,7 +83,7 @@ function paint() {
     `DEBUG  ${fps.toFixed(0)} fps · ${avg.toFixed(1)} ms (worst ${max.toFixed(0)})`,
     `redraw ${renderMsLast.toFixed(1)} ms · ${rendersPerSec.toFixed(0)}/s · long frames ${longFrames}`,
     ...(mem ? [`JS heap ${(mem.usedJSHeapSize / 1048576).toFixed(0)} MB`] : []),
-    `${innerWidth}×${innerHeight} @${devicePixelRatio}x`,
+    `${innerWidth}×${innerHeight} @${devicePixelRatio}x${vintageOff ? ' · VINTAGE OFF' : ''}`,
     ...extra(),
   ];
   panel.textContent = lines.join('\n');
@@ -101,6 +105,10 @@ export function setDebug(next: boolean) {
     /* ignore */
   }
   document.body.classList.toggle('debug', next);
+  if (!next && vintageOff) {
+    vintageOff = false;
+    document.body.classList.remove('novintage');
+  }
   if (next) {
     ensurePanel().hidden = false;
     winStart = 0;
@@ -113,6 +121,13 @@ export function setDebug(next: boolean) {
 export function initDebug(notify: (msg: string) => void) {
   if (on) setDebug(true);
   window.addEventListener('keydown', (e) => {
+    if (on && e.ctrlKey && e.altKey && e.shiftKey && e.code === 'KeyV') {
+      e.preventDefault();
+      vintageOff = !vintageOff;
+      document.body.classList.toggle('novintage', vintageOff);
+      notify(vintageOff ? '🛠 Vintage look OFF (grain, stain, page edge)' : '🛠 Vintage look on');
+      return;
+    }
     if (!(e.ctrlKey && e.altKey && e.shiftKey && e.code === 'KeyD')) return;
     e.preventDefault();
     setDebug(!on);
