@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { setBackgroundRealm } from './background';
-import { draw, drawChunkBorders, setFastDraw, DETAIL_ZOOM, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, setFastDraw, detailZoom, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
 import { tr } from './i18n';
@@ -205,7 +205,7 @@ export function loadWorld(
   glide = null;
   pointers.clear();
   $timer.hidden = config.mode !== 'island' && !level;
-  const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? DETAIL_ZOOM + 4 : 32);
+  const defaultZoom = Math.max(minZoom(), config.mode === 'island' ? detailZoom() + 4 : 32);
   const opening = level ? openingView(level) : null;
   cam.cx = saved?.cx ?? opening?.x ?? HOME.x;
   cam.cy = saved?.cy ?? opening?.y ?? HOME.y;
@@ -542,13 +542,13 @@ function frame(now: number) {
     lastBorders = settings.chunkBorders;
     invalidate();
   }
-  // phones: while the map is moving, skip the decorative layers; one crisp redraw when it settles
+  // map view (zoomed out): while the map moves, skip the decorative layers; one crisp redraw when it settles
   const camKey = `${cam.cx.toFixed(3)},${cam.cy.toFixed(3)},${cam.zoom.toFixed(3)}`;
   if (camKey !== lastCamKey) {
     lastCamKey = camKey;
     lastMoveAt = now;
   }
-  const moving = compactHud.matches && now - lastMoveAt < 160;
+  const moving = cam.zoom < detailZoom() && now - lastMoveAt < 160;
   if (moving !== wasMoving) {
     wasMoving = moving;
     setFastDraw(moving);
@@ -803,10 +803,9 @@ function isChordable(x: number, y: number): boolean {
 }
 
 /** Zoomed out further than this the map is for looking at: taps on cells do nothing. */
-const TAP_MIN_ZOOM = DETAIL_ZOOM;
 let lastZoomHint = 0;
 function tooFarToPlay(): boolean {
-  if (cam.zoom >= TAP_MIN_ZOOM) return false;
+  if (cam.zoom >= detailZoom()) return false;
   const now = performance.now();
   if (now - lastZoomHint > 2500) {
     lastZoomHint = now;
@@ -1151,7 +1150,7 @@ function isDiscovered(x: number, y: number): boolean {
 }
 
 function handleTap(px: number, py: number, secondary: boolean) {
-  if (!progressView && cam.zoom < TAP_MIN_ZOOM) {
+  if (!progressView && cam.zoom < detailZoom()) {
     lastDiscoveredTap = null;
     activate(px, py, secondary); // only shows the "zoom in" hint
     return;
@@ -1174,7 +1173,7 @@ function handleTap(px: number, py: number, secondary: boolean) {
 }
 
 function doubleTapZoom(cx: number, cy: number) {
-  const tz = cam.zoom < 36 ? Math.min(60, Math.max(DETAIL_ZOOM + 4, cam.zoom * 2.2)) : Math.max(minZoom(), cam.zoom / 2.4);
+  const tz = cam.zoom < 36 ? Math.min(60, Math.max(detailZoom() + 4, cam.zoom * 2.2)) : Math.max(minZoom(), cam.zoom / 2.4);
   glideTo(cx + 0.5, cy + 0.5, tz, 420);
 }
 canvas.addEventListener('pointerup', (e) => endPointer(e, false));
