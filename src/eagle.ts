@@ -28,8 +28,8 @@ interface Critter {
 }
 
 const CRITTERS: Critter[] = [
-  { track: MENU_TRACK, cls: 'eagle', files: 'eagle-', cues: [18, 32, 64, 97], chance: 0.5, lead: 5, tail: 4.5, flap: [0, 1, 2, 1], turns: true },
-  { track: SECRET_TRACK, cls: 'ufo', files: 'ufo', cues: [10], chance: 0.5, lead: 5, tail: 5, flap: [0], turns: false },
+  { track: MENU_TRACK, cls: 'eagle', files: 'eagle-', cues: [18, 32, 64, 97], chance: 0.1, lead: 5, tail: 4.5, flap: [0, 1, 2, 1], turns: true },
+  { track: SECRET_TRACK, cls: 'ufo', files: 'ufo', cues: [10], chance: 0.1, lead: 5, tail: 5, flap: [0], turns: false },
 ];
 
 type Flight = { dx: number; dy: number; off: number; angle: number };
