@@ -2067,25 +2067,30 @@ body.no-edge #vintage {
 }
 
 /* ---- Menu eagle (flies over the drifting map when the song cries) ---- */
-.eagle {
+.menu-critter {
   position: fixed;
   left: 0;
   top: 0;
   z-index: 1;
   pointer-events: none;
   will-change: transform;
+}
+.eagle {
   filter: drop-shadow(10px 14px 5px rgba(40, 24, 8, 0.35));
 }
-.eagle[hidden] {
+.ufo {
+  filter: drop-shadow(0 0 10px rgba(120, 255, 200, 0.45));
+}
+.menu-critter[hidden] {
   display: none;
 }
-.eagle img {
+.menu-critter img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: auto;
 }
-.eagle img:first-child {
+.menu-critter img:first-child {
   position: relative;
 }
 :root[data-paper='dark'] .eagle {
