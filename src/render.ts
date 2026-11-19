@@ -313,6 +313,13 @@ function blitLayer(ctx: CanvasRenderingContext2D, l: PixelLayer, dx: number, dy:
   ctx.imageSmoothingEnabled = true;
 }
 
+/**
+ * While the map is being dragged or zoomed on a phone, the purely decorative layers (paper grain and
+ * the stain along the frontier) are left out, and come back when it settles.
+ */
+let fastDraw = false;
+export const setFastDraw = (on: boolean) => void (fastDraw = on);
+
 export function draw(
   ctx: CanvasRenderingContext2D,
   world: World,
@@ -375,8 +382,10 @@ export function draw(
   // The paper grain belongs to the undiscovered ground only: lay it over everything, then
   // repaint what you have discovered so that stays clean and easy to read.
   if (view === 'play' || view === 'review') {
-    drawPaperGrain(ctx, cam, w, h);
-    if (edges) drawFrontierStain(ctx, edges.found, zoom);
+    if (!fastDraw) {
+      drawPaperGrain(ctx, cam, w, h);
+      if (edges) drawFrontierStain(ctx, edges.found, zoom);
+    }
     if (found) {
       blitLayer(ctx, found, dx, dy, cols * zoom, rows * zoom);
     } else {
@@ -887,9 +896,14 @@ function makePaperTexture(dark: boolean): HTMLCanvasElement {
 /** Paper grain over the whole map, anchored to the map so it slides with panning. */
 function drawPaperGrain(ctx: CanvasRenderingContext2D, cam: Camera, w: number, h: number) {
   paperTexture ??= makePaperTexture(toneName !== 'light');
-  const pattern = ctx.createPattern(paperTexture, 'repeat');
-  if (!pattern) return;
-  pattern.setTransform(new DOMMatrix().translate(w / 2 - cam.cx * cam.zoom, h / 2 - cam.cy * cam.zoom));
-  ctx.fillStyle = pattern;
-  ctx.fillRect(0, 0, w, h);
+  // The texture repeats and slides with the map. Stamping whole tiles at whole-pixel positions is far
+  // cheaper than a repeating pattern fill with a transform over the entire screen.
+  const t = TEX;
+  const ox = Math.round(w / 2 - cam.cx * cam.zoom);
+  const oy = Math.round(h / 2 - cam.cy * cam.zoom);
+  const sx = ((ox % t) + t) % t;
+  const sy = ((oy % t) + t) % t;
+  for (let y = sy - t; y < h; y += t) {
+    for (let x = sx - t; x < w; x += t) ctx.drawImage(paperTexture, x, y);
+  }
 }

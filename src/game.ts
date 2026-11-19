@@ -1,6 +1,6 @@
 import type { World } from './wasm/pkg/minefield';
 import { setBackgroundRealm } from './background';
-import { draw, drawChunkBorders, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
+import { draw, drawChunkBorders, setFastDraw, screenToCell, MIN_ZOOM, MAX_ZOOM, RIPPLE_MS, CLEAN_FX_MS, visualsVersion, type Camera, type Fx, type Ripple } from './render';
 import { haptics } from './haptics';
 import { drawGlyph } from './icons';
 import { tr } from './i18n';
@@ -512,6 +512,10 @@ function updateHud(now: number) {
   updateBanner(now);
 }
 
+let lastCamKey = '';
+let lastMoveAt = 0;
+let wasMoving = false;
+
 function frame(now: number) {
   requestAnimationFrame(frame);
   debugFrame(now);
@@ -530,6 +534,18 @@ function frame(now: number) {
   if (settings.chunkBorders !== lastBorders) {
     lastBorders = settings.chunkBorders;
     invalidate();
+  }
+  // phones: while the map is moving, skip the decorative layers; one crisp redraw when it settles
+  const camKey = `${cam.cx.toFixed(3)},${cam.cy.toFixed(3)},${cam.zoom.toFixed(3)}`;
+  if (camKey !== lastCamKey) {
+    lastCamKey = camKey;
+    lastMoveAt = now;
+  }
+  const moving = compactHud.matches && now - lastMoveAt < 160;
+  if (moving !== wasMoving) {
+    wasMoving = moving;
+    setFastDraw(moving);
+    if (!moving) invalidate();
   }
   if (ripple && now > rippleEnd) ripple = null;
   if (endFx && now - endFx.t0 > END_MS) endFx = null;
@@ -779,8 +795,22 @@ function isChordable(x: number, y: number): boolean {
   return (b & 0x30) === 0x20 && (b & 0xb0) !== 0xa0;
 }
 
+/** Zoomed out further than this the map is for looking at: taps on cells do nothing. */
+const TAP_MIN_ZOOM = 12;
+let lastZoomHint = 0;
+function tooFarToPlay(): boolean {
+  if (cam.zoom >= TAP_MIN_ZOOM) return false;
+  const now = performance.now();
+  if (now - lastZoomHint > 2500) {
+    lastZoomHint = now;
+    toast('Zoom in to open squares');
+  }
+  return true;
+}
+
 function activate(px: number, py: number, forceFlag: boolean) {
   if (progressView) return; // the progress map is for looking only
+  if (tooFarToPlay()) return;
   const wd = world!;
   const [x, y] = screenToCell(cam, w, h, px, py);
   const before = {
@@ -1114,6 +1144,11 @@ function isDiscovered(x: number, y: number): boolean {
 }
 
 function handleTap(px: number, py: number, secondary: boolean) {
+  if (!progressView && cam.zoom < TAP_MIN_ZOOM) {
+    lastDiscoveredTap = null;
+    activate(px, py, secondary); // only shows the "zoom in" hint
+    return;
+  }
   const plain = !secondary && !flagMode && !oracleMode && !iceMode && !progressView && !!world;
   const [cx, cy] = plain ? screenToCell(cam, w, h, px, py) : [0, 0];
   if (!plain || !isDiscovered(cx, cy)) {
