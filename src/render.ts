@@ -1116,7 +1116,7 @@ function drawMapPictures(
   grid(80, 0, (wx, wy, hA, c, r) => {
     if (data[cellAt(c, r)] !== ST_VOID) return;
     let name: string;
-    let size = 64; // the waves: bigger than the rest, so they read clearly
+    let size = 90; // the waves: much bigger, so they read clearly
     if (hA < 0.025) [name, size] = ['ship', 60];
     else if (hA < 0.05) [name, size] = ['monster-serpent', 68];
     else if (hA < 0.075) [name, size] = ['monster-kraken', 68];
