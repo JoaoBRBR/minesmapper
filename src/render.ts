@@ -582,7 +582,8 @@ export function draw(
     }
   }
 
-  if (fx?.waves && !spaceMode && (view === 'play' || view === 'review')) {
+  // the shore waves are for the close-up play view only: map view (zoomed out) hides them
+  if (fx?.waves && !spaceMode && (view === 'play' || view === 'review') && zoom >= detailZoom()) {
     drawWaves(ctx, data, cols, rows, x0, y0, px, py, zoom, fx.now);
   }
 
