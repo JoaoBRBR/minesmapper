@@ -96,7 +96,7 @@ and only on ground you have not opened yet.
 | `ui/vibrate.svg` | 48×48 | Vibration is on (📳). |
 | `ui/vibrate-off.svg` | 48×48 | Vibration is off (📴). |
 | `ui/github.svg` | 48×48 | Link to the author page (🐙), floating on the main menu. |
-| `app/icon.png` | 1000×1000 square | Main app image: home-screen / install icon and browser tab icon. Run `npm run icons` after changing it to rebuild the sizes in `public/`. |
+| `app/icon.png` | 1024×1024, transparent background | Main app image: home-screen / install icon and browser tab icon. Cut tight to the mine (your original is `app/icon-original.png`). Run `npm run icons` after changing it. |
 
 | `chart/mountain-rock.svg` | 64×64 | Rock mountains: drawn once in rocky areas of an island (map view). |
 | `chart/mountain-snow.svg` | 64×64 | Snowy / ice mountains: one picture for snow areas. |
