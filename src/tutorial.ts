@@ -61,7 +61,7 @@ const STEPS: Step[] = [
     stage: () =>
       `<div class="tut-hearts">
         <img src="${artUrl('heart-full')}" alt="" /><img src="${artUrl('heart-full')}" alt="" />
-        <span class="tut-lose"><img class="full" src="${artUrl('heart-full')}" alt="" /><img class="empty" src="${artUrl('heart-empty')}" alt="" /></span>
+        <span class="tut-lose"><img class="empty" src="${artUrl('heart-empty')}" alt="" /><img class="full" src="${artUrl('heart-full')}" alt="" /></span>
       </div>`,
   },
   {
