@@ -137,6 +137,8 @@ let future = [];
 let draft = null;   // element being drawn
 let pts = null;     // points of a freehand stroke
 let startP = null;  // start of a box, circle or line
+let eraseDown = false; // the eraser is being dragged
+let eraseSet = new Set(); // picture indices the eraser has passed over in this drag
 
 const f = (n) => +n.toFixed(2);
 const snapV = (v) => (S.snap ? Math.round(v * 2) / 2 : v);
@@ -192,8 +194,10 @@ function validElement(el) {
 svg.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
   if (S.tool === 'erase') {
-    const i = e.target.dataset && e.target.dataset.i;
-    if (i !== undefined) commit(() => S.els.splice(+i, 1));
+    eraseDown = true;
+    eraseSet = new Set();
+    eraseAt(e);
+    render();
     return;
   }
   svg.setPointerCapture(e.pointerId);
@@ -205,6 +209,11 @@ svg.addEventListener('pointerdown', (e) => {
 });
 
 svg.addEventListener('pointermove', (e) => {
+  if (eraseDown) {
+    eraseAt(e);
+    render();
+    return;
+  }
   if (!draft) return;
   const p = pointOf(e);
   draft.end = p;
@@ -216,6 +225,14 @@ svg.addEventListener('pointermove', (e) => {
 });
 
 function endDraw() {
+  if (eraseDown) {
+    eraseDown = false;
+    const gone = eraseSet;
+    eraseSet = new Set();
+    if (gone.size) commit(() => { S.els = S.els.filter((_, i) => !gone.has(i)); });
+    render();
+    return;
+  }
   if (!draft) return;
   const el = makeElement();
   if (validElement(el)) commit(() => S.els.push(el));
@@ -226,6 +243,13 @@ function endDraw() {
 }
 svg.addEventListener('pointerup', endDraw);
 svg.addEventListener('pointercancel', endDraw);
+
+// the eraser marks whatever is under the pointer (lines, or the inside of filled shapes)
+function eraseAt(e) {
+  const t = document.elementFromPoint(e.clientX, e.clientY);
+  const i = t && t.dataset ? t.dataset.i : undefined;
+  if (i !== undefined) eraseSet.add(+i);
+}
 
 // ---- history ----
 function commit(change) {
@@ -258,10 +282,13 @@ function afterChange() {
 let inkOverride = null;
 const colourOf = (c) => (S.single ? (inkOverride || INK) : c);
 function elementMarkup(el, i, hit) {
+  if (eraseSet.has(i)) return ''; // the eraser has passed over it: it disappears
   const fill = el.fill === 'none' ? 'none' : colourOf(el.fill);
-  const visible = `<path d="${el.d}" fill="${fill}" stroke="${colourOf(el.stroke)}" stroke-width="${el.sw}"${hit ? ' pointer-events="none"' : ''}/>`;
-  if (!hit) return visible;
-  const target = `<path d="${el.d}" data-i="${i}" fill="none" stroke="transparent" stroke-width="${Math.max(el.sw, 3)}" pointer-events="${S.tool === 'erase' ? 'stroke' : 'none'}"/>`;
+  const erasing = hit && S.tool === 'erase';
+  const visible = `<path d="${el.d}" fill="${fill}" stroke="${colourOf(el.stroke)}" stroke-width="${el.sw}"${erasing ? ` data-i="${i}" pointer-events="visiblePainted"` : hit ? ' pointer-events="none"' : ''}/>`;
+  if (!erasing) return visible;
+  // a wide, invisible line along the edge makes thin lines easy to catch
+  const target = `<path d="${el.d}" data-i="${i}" fill="none" stroke="transparent" stroke-width="${Math.max(el.sw, 3)}" pointer-events="stroke"/>`;
   return visible + target;
 }
 function pictureMarkup(hit, ink) {
