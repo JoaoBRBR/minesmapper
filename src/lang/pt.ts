@@ -3,8 +3,8 @@
 
 export const PT: Record<string, string> = {
   // --- page ---
-  "Mine's Mapper — a cartographer's minefield": 'Mine\'s Mapper — o campo minado de um cartógrafo',
-  "Mine's Mapper": "Mine's Mapper",
+  "Mines' Mapper — a cartographer's minefield": 'Mine\'s Mapper — o campo minado de um cartógrafo',
+  "Mines' Mapper": "Mines' Mapper",
   "A cartographer's minefield": 'O campo minado de um cartógrafo',
 
   // --- main menu ---

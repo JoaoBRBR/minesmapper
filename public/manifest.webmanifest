@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Mine's Mapper: a cartographer's minefield",
-  "short_name": "Mine's Mapper",
+  "name": "Mines' Mapper: a cartographer's minefield",
+  "short_name": "Mines' Mapper",
   "description": "Chart an endless map or a big island and map out every mine, on old paper.",
   "start_url": "./",
   "scope": "./",

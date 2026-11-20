@@ -1,4 +1,4 @@
-# Art for Mine's Mapper
+# Art for Mines' Mapper
 
 Everything image-related in the game lives here, as **SVG**. The files you find now are simple stand-ins
 that copy the current look: redraw each one in your own style, keep the file name, and send the folder back.

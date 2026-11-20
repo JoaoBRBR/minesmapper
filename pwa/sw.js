@@ -1,4 +1,4 @@
-// Mine's Mapper service worker. The version and the precache list below are filled in at build
+// Mines' Mapper service worker. The version and the precache list below are filled in at build
 // time (see vite.config.ts), so every deploy gets a fresh cache and old ones are dropped.
 const VERSION = '__VERSION__';
 const CACHE = `minefield-${VERSION}`;
