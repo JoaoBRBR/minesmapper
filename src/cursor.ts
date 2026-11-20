@@ -5,10 +5,11 @@ const cursorUrls = import.meta.glob('../art/ui/cursor-feather.svg', { eager: tru
 
 export function initCursor() {
   const url = Object.values(cursorUrls)[0];
-  if (!url || !matchMedia('(pointer: fine)').matches) return;
+  if (!url) return;
   const style = document.createElement('style');
   style.textContent = `@media (pointer: fine) {
-  html, body, button, a, input, select, textarea, label, [role='button'] {
+  /* everything, the map included (it has its own crosshair) */
+  *, *::before, *::after {
     cursor: url("${url}") 3 3, auto !important;
   }
 }`;
