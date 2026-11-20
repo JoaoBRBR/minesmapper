@@ -1059,7 +1059,10 @@ input:not([type]) {
   /* big on purpose: wider than the menu card, and it rises above the card's top edge */
   width: min(460px, 96vw);
   height: auto;
-  margin: -44px auto -10px;
+  margin: -44px 0 -10px;
+  /* wider than its parent: move it half its own width left so it sits in the middle */
+  left: 50%;
+  transform: translateX(-50%);
   filter: drop-shadow(0 4px 6px var(--shadow));
 }
 .menu-col {
@@ -2098,4 +2101,14 @@ body.no-edge #vintage {
 }
 :root[data-paper='dark'] .eagle {
   filter: invert(0.85) drop-shadow(10px 14px 5px rgba(0, 0, 0, 0.4));
+}
+
+/* text for screen readers only (the picture shows the name) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
