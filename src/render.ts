@@ -1120,7 +1120,7 @@ function drawMapPictures(
     if (hA < 0.025) [name, size] = ['ship', 60];
     else if (hA < 0.05) [name, size] = ['monster-serpent', 68];
     else if (hA < 0.075) [name, size] = ['monster-kraken', 68];
-    else if (hA < 0.72) name = `wave-${1 + (Math.floor(hA * 1000) % 3)}`;
+    else if (hA < 0.3) name = `wave-${1 + (Math.floor(hA * 1000) % 3)}`;
     else return;
     drawChartPicture(ctx, name, toScreenX(wx), toScreenY(wy), size);
   });
