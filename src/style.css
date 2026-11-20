@@ -1057,9 +1057,9 @@ input:not([type]) {
   position: relative;
   z-index: 2;
   /* big on purpose: wider than the menu card, and it rises above the card's top edge */
-  width: min(520px, 98vw);
+  width: min(470px, 98vw);
   height: auto;
-  margin: -95px 0 -10px;
+  margin: -82px 0 -10px;
   /* wider than its parent: move it half its own width left so it sits in the middle */
   left: 50%;
   transform: translateX(-50%);
