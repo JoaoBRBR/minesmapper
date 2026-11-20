@@ -1058,14 +1058,14 @@ const LAND_PICTURES: Record<number, [string, number, number]> = {
   3: ['desert', 50, 0.45],
   4: ['badlands', 50, 0.45],
   5: ['savanna', 48, 0.4],
-  6: ['grassland', 48, 0.35],
+  6: ['grassland', 62, 0.35],
   7: ['forest', 56, 0.7],
   8: ['jungle', 56, 0.7],
-  9: ['swamp', 50, 0.5],
+  9: ['swamp', 38, 0.5],
   10: ['taiga', 56, 0.7],
   11: ['tundra', 48, 0.45],
-  12: ['mountain-rock', 60, 0.75],
-  13: ['mountain-snow', 60, 0.75],
+  12: ['mountain-rock', 80, 0.75],
+  13: ['mountain-snow', 80, 0.75],
 };
 
 function drawMapPictures(
