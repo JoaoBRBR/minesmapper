@@ -1030,7 +1030,7 @@ function chartSprite(name: string): HTMLCanvasElement | null {
   const ink =
     toneName === 'dark'
       ? water ? 'rgba(172, 172, 176, 0.62)' : 'rgba(186, 182, 172, 0.66)'
-      : water ? 'rgba(28, 42, 60, 0.82)' : 'rgba(66, 44, 22, 0.82)';
+      : water ? 'rgba(10, 18, 30, 0.95)' : 'rgba(30, 19, 9, 0.95)';
   const key = `${name}|${ink}`;
   let c = chartTinted.get(key);
   if (!c) {
