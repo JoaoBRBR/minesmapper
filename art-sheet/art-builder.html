@@ -99,6 +99,7 @@
     <button id="loadRefBtn">Trace over a photo</button>
     <button id="removeRef" disabled>Remove photo</button>
   </div>
+  <label class="block">Opened picture visibility: <input type="range" id="layerOpacity" min="0" max="1" step="0.05" value="0.3"></label>
   <label class="block">Photo visibility: <input type="range" id="refOpacity" min="0" max="1" step="0.05" value="0.35"></label>
   <input type="file" id="svgFile" accept=".svg,image/svg+xml" hidden>
   <input type="file" id="refFile" accept="image/*" hidden>
@@ -130,7 +131,7 @@ const stage = $('stage');
 const S = {
   tool: 'pen', ink: '#2a1b0e', fill: '#f4e7c6', useFill: false, width: 2.4,
   snap: false, grid: true, guides: true, single: false,
-  vb: [64, 64], els: [], layer: null, layerAttrs: '', ref: null, refOpacity: 0.35,
+  vb: [64, 64], els: [], layer: null, layerAttrs: '', layerOpacity: 0.3, ref: null, refOpacity: 0.35,
 };
 let past = [];
 let future = [];
@@ -293,7 +294,8 @@ function elementMarkup(el, i, hit) {
 }
 function pictureMarkup(hit, ink) {
   inkOverride = ink || null;
-  const layer = S.layer ? `<g ${S.layerAttrs}>${S.layer}</g>` : '';
+  // the opened picture is only a faint basis to draw over: it is shown in the editor, never saved
+  const layer = hit && S.layer ? `<g ${S.layerAttrs} opacity="${S.layerOpacity}" pointer-events="none">${S.layer}</g>` : '';
   const out = layer + S.els.map((el, i) => elementMarkup(el, i, hit)).join('');
   inkOverride = null;
   return out;
@@ -367,6 +369,7 @@ $('grid').addEventListener('change', (e) => { S.grid = e.target.checked; save();
 $('guides').addEventListener('change', (e) => { S.guides = e.target.checked; save(); render(); });
 $('snap').addEventListener('change', (e) => { S.snap = e.target.checked; save(); });
 $('refOpacity').addEventListener('input', (e) => { S.refOpacity = +e.target.value; save(); render(); });
+$('layerOpacity').addEventListener('input', (e) => { S.layerOpacity = +e.target.value; render(); });
 
 $('size').addEventListener('change', (e) => {
   const v = e.target.value;
@@ -424,7 +427,7 @@ function openSvgText(text, name) {
   $('filename').value = name;
   save();
   render();
-  $('status').textContent = `Opened ${name}. It stays as a layer; new lines go on top of it.`;
+  $('status').textContent = `Opened ${name} as a faint basis. Draw above it; the saved file holds only your lines.`;
   return true;
 }
 
