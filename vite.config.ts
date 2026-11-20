@@ -37,7 +37,10 @@ function serviceWorker(): Plugin {
   };
 }
 
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   // Relative asset URLs, so the build works from any path (e.g. GitHub Pages' /<repo>/).
   base: './',
   plugins: [serviceWorker()],
