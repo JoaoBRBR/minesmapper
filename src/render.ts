@@ -776,10 +776,23 @@ function drawWaves(
   const amp = Math.min(3.2, zoom * 0.1);
   const tone = TONES[toneName];
   ctx.lineWidth = Math.max(1, Math.min(1.8, zoom * 0.08));
-  const lines: [Path2D, string, number][] = [
-    [new Path2D(), tone.foam, 0.22],
-    [new Path2D(), tone.foam.replace(/[\d.]+\)$/, '0.32)'), 0.5],
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const lines: [string, number][] = [
+    [tone.foam, 0.22],
+    [tone.foam.replace(/[\d.]+\)$/, '0.32)'), 0.5],
   ];
+  // Each coast edge runs between two grid corners. Its ends are the SAME points as its neighbours' ends,
+  // so the waves join around every inner and outer corner instead of stopping short of it.
+  const stride = cols + 4;
+  const key = (vx: number, vy: number) => (vy + 2) * stride + (vx + 2);
+  const edges: { a: number; b: number; ax: number; ay: number; bx: number; by: number; nx: number; ny: number }[] = [];
+  const normals = new Map<number, [number, number][]>();
+  const addNormal = (k: number, nx: number, ny: number) => {
+    const list = normals.get(k);
+    if (list) list.push([nx, ny]);
+    else normals.set(k, [[nx, ny]]);
+  };
   forEachEdge(data, cols, rows, (r, c, dir, a, b) => {
     const voidA = isVoidCell(a);
     if (voidA === isVoidCell(b)) return;
@@ -788,22 +801,70 @@ function drawWaves(
     let ny = 0;
     if (dir === 'v') nx = voidA ? -1 : 1;
     else ny = voidA ? -1 : 1;
-    const ex = dir === 'v' ? px(x0 + c + 1) : px(x0 + c);
-    const ey = dir === 'v' ? py(y0 + r) : py(y0 + r + 1);
-    const len = zoom;
-    const tx = dir === 'v' ? 0 : len;
-    const ty = dir === 'v' ? len : 0;
-    const phase = t + (c + x0) * 0.9 + (r + y0) * 0.7;
-    for (let k = 0; k < lines.length; k++) {
-      const [path, , off] = lines[k];
-      const o = zoom * off + amp * Math.sin(phase + k * 1.7);
-      const sx = ex + nx * o;
-      const sy = ey + ny * o;
-      path.moveTo(sx, sy);
-      path.quadraticCurveTo(sx + tx / 2 + nx * amp * Math.cos(phase * 1.3 + k), sy + ty / 2 + ny * amp * Math.cos(phase * 1.3 + k), sx + tx, sy + ty);
-    }
+    // the two grid corners of this edge (grid coordinates, relative to the view)
+    const ax = dir === 'v' ? c + 1 : c;
+    const ay = r + (dir === 'v' ? 0 : 1);
+    const bx = c + 1;
+    const by = r + 1;
+    const ka = key(ax, ay);
+    const kb = key(bx, by);
+    edges.push({ a: ka, b: kb, ax, ay, bx, by, nx, ny });
+    addNormal(ka, nx, ny);
+    addNormal(kb, nx, ny);
   });
-  for (const [path, colour] of lines) {
+  // Where two coast edges meet at a corner, the corner's offset is the bisector scaled so both
+  // edges keep their distance from the coast (a mitre). A lone end just uses its own normal.
+  const mitre = new Map<number, [number, number]>();
+  for (const [k, list] of normals) {
+    let mx = 0;
+    let my = 0;
+    if (list.length === 1) {
+      [mx, my] = list[0];
+    } else if (list.length === 2) {
+      const [n1x, n1y] = list[0];
+      const [n2x, n2y] = list[1];
+      const d = 1 + n1x * n2x + n1y * n2y;
+      if (d > 0.25) {
+        mx = (n1x + n2x) / d;
+        my = (n1y + n2y) / d;
+      } else {
+        mx = (n1x + n2x) / 2;
+        my = (n1y + n2y) / 2;
+      }
+    } else {
+      for (const [nx, ny] of list) {
+        mx += nx;
+        my += ny;
+      }
+      const l = Math.hypot(mx, my) || 1;
+      mx /= l;
+      my /= l;
+    }
+    mitre.set(k, [mx, my]);
+  }
+  const vertexAt = (k: number, vx: number, vy: number, o: number, tv: number): [number, number] => {
+    const [mx, my] = mitre.get(k) ?? [0, 0];
+    // the wobble depends only on the corner, so the two edges that share it move together
+    const wob = amp * Math.sin(tv);
+    return [px(x0 + vx) + mx * (zoom * o + wob), py(y0 + vy) + my * (zoom * o + wob)];
+  };
+  for (let k = 0; k < lines.length; k++) {
+    const [colour, off] = lines[k];
+    const path = new Path2D();
+    for (const e of edges) {
+      const tvA = t + (e.ax + x0) * 0.9 + (e.ay + y0) * 0.7 + k * 1.7;
+      const tvB = t + (e.bx + x0) * 0.9 + (e.by + y0) * 0.7 + k * 1.7;
+      const [sxA, syA] = vertexAt(e.a, e.ax, e.ay, off, tvA);
+      const [sxB, syB] = vertexAt(e.b, e.bx, e.by, off, tvB);
+      // the little bulge of the wave between the two ends
+      const mx = (e.ax + e.bx) / 2;
+      const my = (e.ay + e.by) / 2;
+      const bulge = amp * Math.cos(t * 1.3 + (mx + x0) * 0.9 + (my + y0) * 0.7 + k);
+      const cx = (sxA + sxB) / 2 + e.nx * bulge;
+      const cy = (syA + syB) / 2 + e.ny * bulge;
+      path.moveTo(sxA, syA);
+      path.quadraticCurveTo(cx, cy, sxB, syB);
+    }
     ctx.strokeStyle = colour;
     ctx.stroke(path);
   }
