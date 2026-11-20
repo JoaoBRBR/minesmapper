@@ -1,3 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
 <polygon points="24,4 29.9,17.2 44.3,18.6 33.5,28.2 36.7,42.4 24,35 11.3,42.4 14.5,28.2 3.7,18.6 18.1,17.2" fill="#fbbf24" stroke="#78350f" stroke-width="3" stroke-linejoin="round"/>
+<g transform="matrix(0.32000 0 0 0.32000 -142.4000 -785.2800)">
+<line style="fill: none; stroke: rgb(255, 255, 255); stroke-width: 8px; stroke-linecap: round;" x1="519.476" y1="2491.247" x2="508.231" y2="2516.274"/>
+<line style="fill: none; stroke: rgb(255, 255, 255); stroke-width: 8px; stroke-linecap: round;" x1="479.881" y1="2519.278" x2="508.063" y2="2516.72"/>
+</g>
 </svg>
