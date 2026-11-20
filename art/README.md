@@ -142,3 +142,5 @@ An eagle flies across the main-menu background in time with the eagle cry in the
 | `menu/eagle-2.svg` | 128×64 | Eagle, wings half. |
 | `menu/eagle-3.svg` | 128×64 | Eagle, wings up. |
 | `menu/ufo.svg` | 128×64 | UFO that crosses the menu background in the space song (at 0:10, 10% chance). Draw it level, seen from the side; the game slides it across. |
+
+| `ui/cursor-feather.svg` | 32×32 | Mouse pointer on desktop only (phones and tablets keep their own). The tip is the top-left corner. |
