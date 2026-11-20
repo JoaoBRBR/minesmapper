@@ -8,7 +8,7 @@ Open `index.html` in a browser to see all of them at once.
 
 - **SVG** for everything. It is tiny (usually under 2 KB), stays sharp at any zoom, and one file serves every screen.
 - The only PNGs are the four app-icon sizes the phone needs (192, 512, maskable 512, 180). You do not draw
-  those: `npm run icons` makes them from the three SVGs in `app/`.
+  those: `npm run icons` makes them from `app/icon.png`.
 - Numbers on the map and all other text stay as fonts, so they are not in this folder.
 
 ## Rules for drawing
@@ -89,16 +89,15 @@ and only on ground you have not opened yet.
 | `ui/repeat.svg` | 48×48 | Music: repeat this track (🔁). |
 | `ui/sun.svg` | 48×48 | Light paper (☀), in the Dark paper switch. |
 | `ui/moon.svg` | 48×48 | Dark paper (☾), in the Dark paper switch. |
-| `app/logo.svg` | 256×256 | The emblem on the main menu (a compass rose that is also a mine). The game name is written next to it as text. |
+| `app/logo.png` | cut out, transparent | The main-menu logo (scroll and mine). Source of the first picture is `app/logo-original.png`. Replace the PNG to change it. |
 | `ui/worlds.svg` | 48×48 | My worlds button (🗂). |
 | `ui/volume.svg` | 48×48 | Audio is on (🔊), floating button on the main menu. |
 | `ui/volume-off.svg` | 48×48 | Audio is off (🔇). |
 | `ui/vibrate.svg` | 48×48 | Vibration is on (📳). |
 | `ui/vibrate-off.svg` | 48×48 | Vibration is off (📴). |
 | `ui/github.svg` | 48×48 | Link to the author page (🐙), floating on the main menu. |
-| `app/icon.svg` | 512×512 | Main app image: home-screen / install icon (rounded square; corners stay transparent). |
-| `app/icon-maskable.svg` | 512×512 | Same picture, full bleed, no rounded corners. Keep everything important inside the central 80% circle: phones crop it. |
-| `app/favicon.svg` | 512×512 | Browser tab icon. Shown at 16-32 px, so keep the picture bold and simple. |
+| `app/icon.png` | 1000×1000 square | Main app image: home-screen / install icon and browser tab icon. Run `npm run icons` after changing it to rebuild the sizes in `public/`. |
+
 | `chart/mountain-rock.svg` | 64×64 | Rock mountains: drawn once in rocky areas of an island (map view). |
 | `chart/mountain-snow.svg` | 64×64 | Snowy / ice mountains: one picture for snow areas. |
 | `chart/forest.svg` | 64×64 | Forest: a small group of trees together. |

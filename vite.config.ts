@@ -5,8 +5,8 @@ import { defineConfig, type Plugin } from 'vite';
 // Files copied verbatim from public/ that the offline cache should hold.
 const PUBLIC_FILES = [
   'manifest.webmanifest',
-  'favicon.svg',
-  'icon.svg',
+  'favicon.png',
+  'favicon-64.png',
   'icon-192.png',
   'icon-512.png',
   'icon-maskable-512.png',
