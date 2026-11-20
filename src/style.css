@@ -1054,10 +1054,13 @@ input:not([type]) {
 }
 .logo {
   display: block;
-  margin: 0 auto 6px;
-  width: 240px;
+  position: relative;
+  z-index: 2;
+  /* big on purpose: wider than the menu card, and it rises above the card's top edge */
+  width: min(460px, 96vw);
   height: auto;
-  filter: drop-shadow(0 3px 5px var(--shadow));
+  margin: -44px auto -10px;
+  filter: drop-shadow(0 4px 6px var(--shadow));
 }
 .menu-col {
   display: grid;
