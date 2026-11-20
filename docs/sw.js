@@ -1,8 +1,8 @@
-// Mine's Mapper service worker. The version and the precache list below are filled in at build
+// Mines' Mapper service worker. The version and the precache list below are filled in at build
 // time (see vite.config.ts), so every deploy gets a fresh cache and old ones are dropped.
-const VERSION = '4d01b14bc2';
+const VERSION = '15b304b1d9';
 const CACHE = `minefield-${VERSION}`;
-const PRECACHE = ["./","assets/cinzel-latin-700-normal-Dkw14w9r.woff2","assets/index-Duy507qQ.css","assets/index-Eilk-YV4.js","assets/kalam-latin-700-normal-D2H-9ISU.woff2","assets/minefield_bg-ByCTPHjR.wasm","assets/render-xph6hnam.js","assets/viewer3d-BLD4IIDh.js","manifest.webmanifest","favicon.svg","icon.svg","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
+const PRECACHE = ["./","assets/cinzel-latin-700-normal-Dkw14w9r.woff2","assets/index-BJGVIHQc.css","assets/index-Bq9BsMuV.js","assets/kalam-latin-700-normal-D2H-9ISU.woff2","assets/logo-Up8suCQS.png","assets/minefield_bg-S18Oj3A-.wasm","assets/render-Dt8t4knq.js","assets/viewer3d-B7BtK5jS.js","manifest.webmanifest","favicon.png","favicon-64.png","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
