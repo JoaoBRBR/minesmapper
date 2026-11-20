@@ -26,7 +26,7 @@ export const artReady = Promise.all(
   }),
 );
 
-export type Glyph = 'flag' | 'flag-negative' | 'mine' | 'mine-negative' | 'oracle-glass' | 'ice-crystal' | 'treasure-x' | 'cloud-1' | 'cloud-2' | 'cloud-3';
+export type Glyph = 'flag' | 'flag-negative' | 'mine' | 'mine-negative' | 'oracle-glass' | 'ice-crystal' | 'treasure-x';
 
 function glyphAt(name: Glyph, px: number): CanvasImageSource | undefined {
   const img = mapImages.get(name);

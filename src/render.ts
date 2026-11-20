@@ -1,7 +1,7 @@
 import type { World } from './wasm/pkg/minefield';
 import { vintageParts } from './debug';
 import { settings, type NumberStyle } from './settings';
-import { drawGlyph, type Glyph } from './icons';
+import { drawGlyph } from './icons';
 
 export interface Camera {
   /** World-space cell coordinate at the centre of the screen (fractional). */
@@ -443,7 +443,6 @@ export function draw(
 
   if (view === 'play' && !spaceMode && zoom < detailZoom() && settings.mapDrawings && world.is_island()) {
     drawMapPictures(ctx, data, cols, rows, x0, y0, cam, w, h);
-    drawClouds(ctx, world, cam, w, h);
   }
 
   if (spaceMode) drawStars(ctx, data, cols, rows, x0, y0, px, py, zoom);
@@ -1045,35 +1044,6 @@ function chartSprite(name: string): HTMLCanvasElement | null {
     chartTinted.set(key, c);
   }
   return c;
-}
-
-// Clouds past the island's square limit: one cloud per block of CLOUD_CELLS, drawn a little bigger
-// than its block so the neighbouring clouds overlap and join up.
-const CLOUD_CELLS = 12;
-const CLOUD_NAMES: Glyph[] = ['cloud-1', 'cloud-2', 'cloud-3'];
-function drawClouds(ctx: CanvasRenderingContext2D, world: World, cam: Camera, w: number, h: number) {
-  const half = Math.floor(world.island_size() / 2);
-  const zoom = cam.zoom;
-  const left = cam.cx - w / 2 / zoom;
-  const top = cam.cy - h / 2 / zoom;
-  const bx0 = Math.floor(left / CLOUD_CELLS) - 1;
-  const bx1 = Math.floor((left + w / zoom) / CLOUD_CELLS) + 1;
-  const by0 = Math.floor(top / CLOUD_CELLS) - 1;
-  const by1 = Math.floor((top + h / zoom) / CLOUD_CELLS) + 1;
-  const block = CLOUD_CELLS * zoom;
-  const size = block * 1.3; // a little bigger than its block: the neighbours overlap
-  const grow = (size - block) / 2;
-  for (let by = by0; by <= by1; by++) {
-    for (let bx = bx0; bx <= bx1; bx++) {
-      const mx = bx * CLOUD_CELLS + CLOUD_CELLS / 2;
-      const my = by * CLOUD_CELLS + CLOUD_CELLS / 2;
-      // only past the island's square: the island itself stays clear
-      if (mx >= -half && mx < half && my >= -half && my < half) continue;
-      const sx = (bx * CLOUD_CELLS - cam.cx) * zoom + w / 2 - grow;
-      const sy = (by * CLOUD_CELLS - cam.cy) * zoom + h / 2 - grow;
-      drawGlyph(ctx, CLOUD_NAMES[Math.floor(hash2(bx, by) * CLOUD_NAMES.length)], sx, sy, size);
-    }
-  }
 }
 
 /** Draws one chart picture centred on a screen point, `size` CSS pixels wide. */

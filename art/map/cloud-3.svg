@@ -1,4 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" stroke="#5a5a62" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Cloud past the island's edge (map view), variant 3. Keep the cloud touching the left and right edges so neighbours join. -->
-  <path d="M0 40 Q4 30 16 32 Q20 20 34 24 Q44 16 54 26 Q64 28 64 40 Q64 50 54 50 L10 50 Q0 50 0 40 Z" fill="#fbfbf7"/>
-</svg>
