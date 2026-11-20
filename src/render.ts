@@ -1018,6 +1018,8 @@ for (const [path, url] of Object.entries(chartUrls)) {
 }
 const WATER_PICTURES = new Set(['wave-1', 'wave-2', 'wave-3', 'lake', 'ship', 'monster-serpent', 'monster-kraken']);
 const chartTinted = new Map<string, HTMLCanvasElement>();
+/** How much bigger the chart pictures are drawn than their base size. */
+const CHART_SCALE = 1.5;
 const CHART_PX = 128; // the pictures are rasterised once at this size and scaled down when drawn
 
 /** The picture in the ink of the current paper (cached). */
@@ -1047,7 +1049,8 @@ function chartSprite(name: string): HTMLCanvasElement | null {
 /** Draws one chart picture centred on a screen point, `size` CSS pixels wide. */
 export function drawChartPicture(ctx: CanvasRenderingContext2D, name: string, x: number, y: number, size: number) {
   const c = chartSprite(name);
-  if (c) ctx.drawImage(c, x - size / 2, y - size / 2, size, size);
+  const s = size * CHART_SCALE;
+  if (c) ctx.drawImage(c, x - s / 2, y - s / 2, s, s);
 }
 
 /** Which picture a biome gets, how big it is, and how often (per block). */
